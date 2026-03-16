@@ -1,14 +1,23 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
-import Avatar from '../components/Avatar';
 import Quiz from '../components/Quiz';
 import AudioControls from '../components/AudioControls';
 import { getSpeechService } from '../services/SpeechService';
 import { getAIService } from '../services/AIService';
 import { trainingModules, getModuleById } from '../data/trainingData';
 import styles from './training.module.css';
+
+// Reuse the 3D TalkingAvatar from the roleplay page
+const TalkingAvatar = dynamic(() => import('../components/TalkingAvatar'), {
+  ssr: false,
+});
+
+// Node TTS endpoint (Kokoro) from the avatar-training-node-js app
+const TTS_URL =
+  process.env.NEXT_PUBLIC_TTS_URL || 'http://localhost:8080/api/tts';
 
 function TrainingContent() {
   const searchParams = useSearchParams();
@@ -28,8 +37,12 @@ function TrainingContent() {
   const [lessonStarted, setLessonStarted] = useState(false);
   const [completedLessons, setCompletedLessons] = useState(new Set());
 
-  const speechRef = useRef(null);
+  const speechRef = useRef(null); // still used for browser STT (mic answers)
   const aiRef = useRef(null);
+
+  // Bridge into TalkingAvatar (same pattern as roleplay page)
+  const speakRef = useRef(null);
+  const resumeAudioRef = useRef(null);
 
   const lesson = module.lessons[currentLessonIndex];
 
@@ -54,31 +67,80 @@ function TrainingContent() {
     speechRef.current?.stop();
   }, [moduleId, module.title]);
 
-  const speakText = useCallback(async (text) => {
-    if (!speechRef.current) return;
+  /**
+   * Speak text using the shared Kokoro TTS + TalkingAvatar pipeline.
+   * Falls back to browser SpeechSynthesis if the Node TTS endpoint is unavailable.
+   */
+  const speakText = useCallback(
+    async (text) => {
+      if (!text) return;
 
-    try {
+      // Ensure TalkingAvatar's AudioContext is resumed on user gestures
+      resumeAudioRef.current?.();
+
       setIsSpeaking(true);
       setAvatarState('talking');
       setAvatarMessage(text);
 
-      await speechRef.current.speak(text, {
-        volume,
-        onStart: () => {
-          setIsSpeaking(true);
-          setAvatarState('talking');
-        },
-        onEnd: () => {
+      // 1) Try Node TTS -> TalkingAvatar (same as roleplay)
+      if (speakRef.current) {
+        try {
+          const res = await fetch(TTS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, voice: 'af_heart' }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`TTS request failed with status ${res.status}`);
+          }
+
+          const data = await res.json();
+          const audio = Array.isArray(data.audio)
+            ? new Float32Array(data.audio)
+            : new Float32Array(0);
+
+          if (audio.length > 0) {
+            await speakRef.current(audio, data.phonemes ?? [], {
+              sampleRate: 24000,
+            });
+          }
+
           setIsSpeaking(false);
           setAvatarState('idle');
-        },
-      });
-    } catch (err) {
-      console.error('Speech error:', err);
-      setIsSpeaking(false);
-      setAvatarState('idle');
-    }
-  }, [volume]);
+          return;
+        } catch (err) {
+          console.error('[Training] Node TTS failed, falling back to browser TTS:', err);
+        }
+      }
+
+      // 2) Fallback: browser SpeechSynthesis (old behaviour)
+      if (!speechRef.current) {
+        setIsSpeaking(false);
+        setAvatarState('idle');
+        return;
+      }
+
+      try {
+        await speechRef.current.speak(text, {
+          volume,
+          onStart: () => {
+            setIsSpeaking(true);
+            setAvatarState('talking');
+          },
+          onEnd: () => {
+            setIsSpeaking(false);
+            setAvatarState('idle');
+          },
+        });
+      } catch (err) {
+        console.error('Speech error:', err);
+        setIsSpeaking(false);
+        setAvatarState('idle');
+      }
+    },
+    [volume],
+  );
 
   const handlePlay = useCallback(async () => {
     if (!lesson) return;
@@ -238,7 +300,17 @@ function TrainingContent() {
             </select>
           </div>
 
-          <Avatar state={avatarState} message={avatarMessage} />
+          <div className={styles.avatarContainer}>
+            <TalkingAvatar
+              onReady={() => {}}
+              onSpeakRef={speakRef}
+              onResumeAudioRef={resumeAudioRef}
+              containerStyle={{ width: '100%', minHeight: 320 }}
+            />
+            <div className={styles.avatarBubble}>
+              {avatarMessage && <p>{avatarMessage}</p>}
+            </div>
+          </div>
 
           <AudioControls
             isSpeaking={isSpeaking}
