@@ -52,6 +52,13 @@ export default function TalkingAvatar({
     if (onSpeakRef) onSpeakRef.current = speak;
   }, [speak, onSpeakRef]);
 
+  // Use a ref for onReady so it doesn't trigger effect re-runs if the parent
+  // passes an inline function (which changes identity every render).
+  const onReadyRef = useRef(onReady);
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
   useEffect(() => {
     if (!containerRef.current) return;
     let cancelled = false;
@@ -90,7 +97,7 @@ export default function TalkingAvatar({
 
         headRef.current = head;
         setLoadState('ready');
-        onReady?.();
+        onReadyRef.current?.();
       } catch (err) {
         if (cancelled) return;
         const msg = err?.message || String(err);
@@ -105,7 +112,7 @@ export default function TalkingAvatar({
       cancelled = true;
       headRef.current = null;
     };
-  }, [resolvedAvatarUrl, onReady]);
+  }, [resolvedAvatarUrl]); // removed onReady from deps, relying on the ref
 
   const isOverlayVisible = loadState !== 'ready';
 
