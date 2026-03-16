@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * AI Service — handles dynamic conversational Q&A
- * Falls back to keyword-matched scripted responses if no API key is provided.
+ * AI Service — calls the server-side /api/chat route (OpenAI GPT-4o).
+ * Falls back to keyword-matched scripted responses if the API call fails.
  */
 
 const SCRIPTED_RESPONSES = {
@@ -14,48 +14,45 @@ const SCRIPTED_RESPONSES = {
   safety: "Workplace safety is crucial. It includes understanding emergency procedures, using personal protective equipment, and identifying potential hazards in your work environment.",
   privacy: "Data privacy involves protecting personal information from unauthorized access. Key principles include data minimization, consent, and transparency.",
   customer: "Excellent customer service starts with active listening, empathy, and a genuine desire to solve the customer's problem efficiently.",
-  default: "That's a great question! In a full implementation, I would use AI to give you a detailed answer. For now, let me suggest reviewing the training materials for more information on this topic.",
+  default: "That's a great question! Let me suggest reviewing the training materials for more information on this topic.",
 };
 
 class AIService {
   constructor() {
-    this.apiKey = null;
+    this.history = [];
   }
 
   /**
-   * Set the API key for OpenAI
-   */
-  setApiKey(key) {
-    this.apiKey = key;
-  }
-
-  /**
-   * Ask a question — uses OpenAI if key is set, otherwise keyword match
+   * Ask a question via the server-side GPT-4o API route.
    * @param {string} question - User's question
-   * @param {string} context - Current lesson context
+   * @param {string} context - Current lesson context (optional)
    * @returns {Promise<string>}
    */
   async askQuestion(question, context = '') {
-    if (this.apiKey) {
-      return this._askAI(question, context);
-    }
-    return this._getScriptedResponse(question);
-  }
-
-  async _askAI(question, context) {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, context, apiKey: this.apiKey }),
+        body: JSON.stringify({
+          message: question,
+          context,
+          history: this.history,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error('API request failed');
-      }
+      if (!response.ok) throw new Error('API request failed');
 
       const data = await response.json();
-      return data.answer;
+      const answer = data.answer;
+
+      // Update history for multi-turn conversation
+      this.history = [
+        ...this.history,
+        { role: 'user', content: question },
+        { role: 'assistant', content: answer },
+      ].slice(-20); // keep last 20 messages
+
+      return answer;
     } catch (error) {
       console.error('AI Service error:', error);
       return this._getScriptedResponse(question);
@@ -65,11 +62,13 @@ class AIService {
   _getScriptedResponse(question) {
     const lowerQ = question.toLowerCase();
     for (const [keyword, response] of Object.entries(SCRIPTED_RESPONSES)) {
-      if (keyword !== 'default' && lowerQ.includes(keyword)) {
-        return response;
-      }
+      if (keyword !== 'default' && lowerQ.includes(keyword)) return response;
     }
     return SCRIPTED_RESPONSES.default;
+  }
+
+  resetHistory() {
+    this.history = [];
   }
 }
 
@@ -77,9 +76,7 @@ class AIService {
 let aiServiceInstance = null;
 
 export function getAIService() {
-  if (!aiServiceInstance) {
-    aiServiceInstance = new AIService();
-  }
+  if (!aiServiceInstance) aiServiceInstance = new AIService();
   return aiServiceInstance;
 }
 

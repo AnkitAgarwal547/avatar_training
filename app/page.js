@@ -20,6 +20,12 @@ export default function HomePage() {
       color: '#06b6d4',
     },
     {
+      icon: '🤖',
+      title: 'Live AI Roleplay',
+      description: 'Practice real customer complaint scenarios with a GPT-4o powered avatar using the L-A-S-T method.',
+      color: '#8b5cf6',
+    },
+    {
       icon: '📝',
       title: 'Smart Quizzes',
       description: 'Interactive quizzes with instant feedback. The avatar explains correct answers and encourages you along the way.',
@@ -53,6 +59,9 @@ export default function HomePage() {
               <Link href="/training" className={styles.ctaPrimary}>
                 Start Training
                 <span className={styles.ctaArrow}>→</span>
+              </Link>
+              <Link href="/roleplay" className={styles.ctaSecondary}>
+                🤖 Try AI Roleplay
               </Link>
               <Link href="/modules" className={styles.ctaSecondary}>
                 Browse Modules
