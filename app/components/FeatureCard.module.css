@@ -1,0 +1,70 @@
+.card {
+  position: relative;
+  padding: var(--space-8) var(--space-6);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: var(--border-subtle);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  transition: all var(--transition-base);
+  animation: slideUp 0.6s ease both;
+  overflow: hidden;
+}
+
+.card:hover {
+  background: var(--bg-glass-hover);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  border-color: color-mix(in srgb, var(--feature-color) 40%, transparent);
+}
+
+.iconWrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--feature-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--feature-color) 25%, transparent);
+  margin-bottom: var(--space-5);
+  transition: transform var(--transition-base);
+}
+
+.card:hover .iconWrap {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.icon {
+  font-size: 1.8rem;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-3);
+}
+
+.description {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.glowLine {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--feature-color), transparent);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.card:hover .glowLine {
+  opacity: 0.6;
+}

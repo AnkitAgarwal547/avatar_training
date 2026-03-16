@@ -1,0 +1,173 @@
+.avatarContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  position: relative;
+}
+
+.glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+  width: 250px;
+  height: 250px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  transition: all var(--transition-slow);
+  pointer-events: none;
+}
+
+.glowActive {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(139, 92, 246, 0.1) 40%, transparent 70%);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.avatarWrapper {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  z-index: 1;
+}
+
+.avatarWrapper.idle {
+  animation: float 4s ease-in-out infinite;
+}
+
+.avatarWrapper.talking {
+  animation: none;
+}
+
+.avatarWrapper.happy {
+  animation: celebrateScale 0.6s ease-in-out;
+}
+
+.avatarWrapper.thinking {
+  animation: float 3s ease-in-out infinite;
+}
+
+.avatarSvg {
+  width: 100%;
+  height: 100%;
+}
+
+.eyes {
+  transition: all var(--transition-base);
+}
+
+.talkingMouth {
+  transform-origin: center;
+}
+
+.stateIndicator {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  background: var(--bg-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: var(--border-subtle);
+  animation: fadeIn 0.3s ease;
+}
+
+.indicator_talking {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
+}
+
+.indicator_happy {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+}
+
+.indicator_thinking {
+  border-color: rgba(245, 158, 11, 0.5);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+/* Speech Bubble */
+.speechBubble {
+  position: relative;
+  max-width: 400px;
+  width: 100%;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  animation: slideUp 0.4s ease;
+  z-index: 1;
+}
+
+.bubbleActive {
+  border-color: rgba(6, 182, 212, 0.3);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.1);
+}
+
+.bubbleArrow {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  background: var(--bg-glass);
+  border-top: var(--border-subtle);
+  border-left: var(--border-subtle);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.bubbleContent {
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.bubbleContent::-webkit-scrollbar {
+  width: 3px;
+}
+
+.bubbleContent::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
+}
+
+.cursor {
+  display: inline-block;
+  animation: pulse 0.8s infinite;
+  color: var(--accent-tertiary);
+  font-weight: 700;
+}
+
+.soundWaves {
+  animation: fadeIn 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .avatarWrapper {
+    width: 150px;
+    height: 150px;
+  }
+
+  .speechBubble {
+    max-width: 320px;
+  }
+
+  .glow {
+    width: 180px;
+    height: 180px;
+  }
+}
