@@ -1,42 +1,46 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import Avatar from './components/Avatar';
-import FeatureCard from './components/FeatureCard';
-import styles from './page.module.css';
+import Link from "next/link";
+import Avatar from "./components/Avatar";
+import FeatureCard from "./components/FeatureCard";
+import styles from "./page.module.css";
 
 export default function HomePage() {
   const features = [
     {
-      icon: '🗣️',
-      title: 'AI Voice Avatar',
-      description: 'An intelligent avatar that speaks your training content aloud with natural voice synthesis and animated expressions.',
-      color: '#6366f1',
+      icon: "🗣️",
+      title: "AI Voice Avatar",
+      description:
+        "An intelligent avatar that speaks your training content aloud with natural voice synthesis and animated expressions.",
+      color: "#6366f1",
     },
     {
-      icon: '🎙️',
-      title: 'Voice Interaction',
-      description: 'Answer questions by speaking! Our speech recognition understands your voice responses in real-time.',
-      color: '#06b6d4',
+      icon: "🎙️",
+      title: "Voice Interaction",
+      description:
+        "Answer questions by speaking! Our speech recognition understands your voice responses in real-time.",
+      color: "#06b6d4",
     },
     {
-      icon: '🤖',
-      title: 'Live AI Roleplay',
-      description: 'Practice real customer complaint scenarios with a GPT-4o powered avatar using the L-A-S-T method.',
-      color: '#8b5cf6',
+      icon: "🤖",
+      title: "Live AI Roleplay",
+      description:
+        "Practice real customer complaint scenarios with a GPT-4o powered avatar using the L-A-S-T method.",
+      color: "#8b5cf6",
     },
     {
-      icon: '📝',
-      title: 'Smart Quizzes',
-      description: 'Interactive quizzes with instant feedback. The avatar explains correct answers and encourages you along the way.',
-      color: '#10b981',
+      icon: "📝",
+      title: "Smart Quizzes",
+      description:
+        "Interactive quizzes with instant feedback. The avatar explains correct answers and encourages you along the way.",
+      color: "#10b981",
     },
-    {
-      icon: '📊',
-      title: 'Progress Tracking',
-      description: 'Track your learning journey with detailed progress reports, completion stats, and performance analytics.',
-      color: '#f59e0b',
-    },
+    // {
+    //   icon: '📊',
+    //   title: 'Progress Tracking',
+    //   description: 'Track your learning journey with detailed progress reports, completion stats, and performance analytics.',
+    //   color: '#f59e0b',
+    // },
   ];
 
   return (
@@ -45,15 +49,18 @@ export default function HomePage() {
       <section className={styles.hero}>
         <div className={styles.heroContent}>
           <div className={styles.heroText}>
-            <span className={styles.badge}>🚀 AI-Powered Training Platform</span>
+            <span className={styles.badge}>
+              🚀 AI-Powered Training Platform
+            </span>
             <h1 className={styles.title}>
               Meet Your Personal
               <span className={styles.gradientText}> AI Training Avatar</span>
             </h1>
             <p className={styles.subtitle}>
-              Experience the future of corporate training. Our AI avatar speaks lessons aloud,
-              answers your questions, and guides you through interactive quizzes — making
-              learning engaging, personal, and effective.
+              Experience the future of corporate training. Our AI avatar speaks
+              lessons aloud, answers your questions, and guides you through
+              interactive quizzes — making learning engaging, personal, and
+              effective.
             </p>
             <div className={styles.ctas}>
               <Link href="/training" className={styles.ctaPrimary}>
@@ -63,9 +70,9 @@ export default function HomePage() {
               <Link href="/roleplay" className={styles.ctaSecondary}>
                 🤖 Try AI Roleplay
               </Link>
-              <Link href="/modules" className={styles.ctaSecondary}>
+              {/* <Link href="/modules" className={styles.ctaSecondary}>
                 Browse Modules
-              </Link>
+              </Link> */}
             </div>
 
             <div className={styles.stats}>
@@ -87,7 +94,10 @@ export default function HomePage() {
           </div>
 
           <div className={styles.heroAvatar}>
-            <Avatar state="idle" message="Hi there! I'm your AI training avatar. Click 'Start Training' to begin your learning journey!" />
+            <Avatar
+              state="idle"
+              message="Hi there! I'm your AI training avatar. Click 'Start Training' to begin your learning journey!"
+            />
           </div>
         </div>
       </section>
@@ -99,7 +109,8 @@ export default function HomePage() {
             Why <span className={styles.gradientText}>AvatarTrainer</span>?
           </h2>
           <p className={styles.sectionSubtitle}>
-            A next-generation training platform that makes learning feel personal and interactive.
+            A next-generation training platform that makes learning feel
+            personal and interactive.
           </p>
 
           <div className={styles.featuresGrid}>
@@ -118,25 +129,37 @@ export default function HomePage() {
             <div className={styles.step}>
               <div className={styles.stepNumber}>1</div>
               <h3>Choose a Module</h3>
-              <p>Browse our training modules and select a topic to start learning.</p>
+              <p>
+                Browse our training modules and select a topic to start
+                learning.
+              </p>
             </div>
             <div className={styles.stepLine} />
             <div className={styles.step}>
               <div className={styles.stepNumber}>2</div>
               <h3>Learn with Avatar</h3>
-              <p>Your AI avatar speaks lessons aloud and walks you through key concepts.</p>
+              <p>
+                Your AI avatar speaks lessons aloud and walks you through key
+                concepts.
+              </p>
             </div>
             <div className={styles.stepLine} />
             <div className={styles.step}>
               <div className={styles.stepNumber}>3</div>
               <h3>Take Quizzes</h3>
-              <p>Test your knowledge with interactive quizzes. Answer by clicking or speaking!</p>
+              <p>
+                Test your knowledge with interactive quizzes. Answer by clicking
+                or speaking!
+              </p>
             </div>
             <div className={styles.stepLine} />
             <div className={styles.step}>
               <div className={styles.stepNumber}>4</div>
               <h3>Track Progress</h3>
-              <p>Monitor your learning journey with detailed progress and performance stats.</p>
+              <p>
+                Monitor your learning journey with detailed progress and
+                performance stats.
+              </p>
             </div>
           </div>
         </div>

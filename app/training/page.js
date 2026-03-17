@@ -1,41 +1,48 @@
-'use client';
+"use client";
 
-import React, { useState, useCallback, useEffect, useRef, Suspense } from 'react';
-import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
-import Quiz from '../components/Quiz';
-import AudioControls from '../components/AudioControls';
-import { getSpeechService } from '../services/SpeechService';
-import { getAIService } from '../services/AIService';
-import { trainingModules, getModuleById } from '../data/trainingData';
-import styles from './training.module.css';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  Suspense,
+} from "react";
+import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
+import Quiz from "../components/Quiz";
+import AudioControls from "../components/AudioControls";
+import { getSpeechService } from "../services/SpeechService";
+import { getAIService } from "../services/AIService";
+import { trainingModules, getModuleById } from "../data/trainingData";
+import styles from "./training.module.css";
 
 // Reuse the 3D TalkingAvatar from the roleplay page
-const TalkingAvatar = dynamic(() => import('../components/TalkingAvatar'), {
+const TalkingAvatar = dynamic(() => import("../components/TalkingAvatar"), {
   ssr: false,
 });
 
 // Node TTS endpoint (Kokoro) from the avatar-training-node-js app
 const TTS_URL =
-  process.env.NEXT_PUBLIC_TTS_URL || 'http://localhost:8080/api/tts';
+  process.env.NEXT_PUBLIC_TTS_URL || "http://localhost:8080/api/tts";
 
 function TrainingContent() {
   const searchParams = useSearchParams();
-  const moduleId = searchParams.get('module') || trainingModules[0].id;
+  const moduleId = searchParams.get("module") || trainingModules[0].id;
   const module = getModuleById(moduleId) || trainingModules[0];
 
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
-  const [avatarState, setAvatarState] = useState('idle');
-  const [avatarMessage, setAvatarMessage] = useState('');
+  const [avatarState, setAvatarState] = useState("idle");
+  const [avatarMessage, setAvatarMessage] = useState("");
   const [showQuiz, setShowQuiz] = useState(false);
   const [quizAnswered, setQuizAnswered] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [volume, setVolume] = useState(1);
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const [lessonStarted, setLessonStarted] = useState(false);
   const [completedLessons, setCompletedLessons] = useState(new Set());
+  const [avatarReady, setAvatarReady] = useState(false);
 
   const speechRef = useRef(null); // still used for browser STT (mic answers)
   const aiRef = useRef(null);
@@ -43,6 +50,7 @@ function TrainingContent() {
   // Bridge into TalkingAvatar (same pattern as roleplay page)
   const speakRef = useRef(null);
   const resumeAudioRef = useRef(null);
+  const stopRef = useRef(null);
 
   const lesson = module.lessons[currentLessonIndex];
 
@@ -62,10 +70,22 @@ function TrainingContent() {
     setShowQuiz(false);
     setQuizAnswered(false);
     setLessonStarted(false);
-    setAvatarState('idle');
-    setAvatarMessage(`Welcome to ${module.title}! Press play to begin the first lesson.`);
+    setAvatarState("idle");
+    setAvatarMessage(
+      `Welcome to ${module.title}! Press play to begin the first lesson.`,
+    );
     speechRef.current?.stop();
   }, [moduleId, module.title]);
+
+  // Autoplay: start current lesson when avatar is ready and lesson hasn't started
+  const handlePlayRef = useRef(null);
+  useEffect(() => {
+    if (!avatarReady || !lesson || lessonStarted) return;
+    const timer = setTimeout(() => {
+      handlePlayRef.current?.();
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [avatarReady, lesson?.id, lessonStarted]);
 
   /**
    * Speak text using the shared Kokoro TTS + TalkingAvatar pipeline.
@@ -75,20 +95,22 @@ function TrainingContent() {
     async (text) => {
       if (!text) return;
 
-      // Ensure TalkingAvatar's AudioContext is resumed on user gestures
+      speechRef.current?.stop();
+
       resumeAudioRef.current?.();
 
       setIsSpeaking(true);
-      setAvatarState('talking');
-      setAvatarMessage(text);
+      setAvatarState("talking");
+      // Don't put long chatbot responses in the left bubble — keep it short
+      setAvatarMessage(text.length > 100 ? "Speaking…" : text);
 
       // 1) Try Node TTS -> TalkingAvatar (same as roleplay)
       if (speakRef.current) {
         try {
           const res = await fetch(TTS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, voice: 'af_heart' }),
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, voice: "af_heart" }),
           });
 
           if (!res.ok) {
@@ -96,9 +118,17 @@ function TrainingContent() {
           }
 
           const data = await res.json();
-          const audio = Array.isArray(data.audio)
+          let audio = Array.isArray(data.audio)
             ? new Float32Array(data.audio)
             : new Float32Array(0);
+
+          // Apply volume to TTS playback (0..1)
+          if (audio.length > 0 && volume !== 1) {
+            const scaled = new Float32Array(audio.length);
+            for (let i = 0; i < audio.length; i++)
+              scaled[i] = audio[i] * volume;
+            audio = scaled;
+          }
 
           if (audio.length > 0) {
             await speakRef.current(audio, data.phonemes ?? [], {
@@ -107,17 +137,20 @@ function TrainingContent() {
           }
 
           setIsSpeaking(false);
-          setAvatarState('idle');
+          setAvatarState("idle");
           return;
         } catch (err) {
-          console.error('[Training] Node TTS failed, falling back to browser TTS:', err);
+          console.error(
+            "[Training] Node TTS failed, falling back to browser TTS:",
+            err,
+          );
         }
       }
 
       // 2) Fallback: browser SpeechSynthesis (old behaviour)
       if (!speechRef.current) {
         setIsSpeaking(false);
-        setAvatarState('idle');
+        setAvatarState("idle");
         return;
       }
 
@@ -126,17 +159,17 @@ function TrainingContent() {
           volume,
           onStart: () => {
             setIsSpeaking(true);
-            setAvatarState('talking');
+            setAvatarState("talking");
           },
           onEnd: () => {
             setIsSpeaking(false);
-            setAvatarState('idle');
+            setAvatarState("idle");
           },
         });
       } catch (err) {
-        console.error('Speech error:', err);
+        console.error("Speech error:", err);
         setIsSpeaking(false);
-        setAvatarState('idle');
+        setAvatarState("idle");
       }
     },
     [volume],
@@ -151,8 +184,10 @@ function TrainingContent() {
     await speakText(lesson.avatarScript);
 
     // After speaking, show quiz
-    setAvatarState('happy');
-    setAvatarMessage("Great! Now let's test what you've learned with a quick quiz.");
+    setAvatarState("happy");
+    setAvatarMessage(
+      "Great! Now let's test what you've learned with a quick quiz.",
+    );
 
     setTimeout(() => {
       setShowQuiz(true);
@@ -162,10 +197,15 @@ function TrainingContent() {
     }, 1500);
   }, [lesson, speakText]);
 
+  // Keep ref updated for autoplay effect
+  useEffect(() => {
+    handlePlayRef.current = handlePlay;
+  }, [handlePlay]);
+
   const handlePause = useCallback(() => {
     speechRef.current?.stop();
     setIsSpeaking(false);
-    setAvatarState('idle');
+    setAvatarState("idle");
   }, []);
 
   const handleRepeat = useCallback(() => {
@@ -186,7 +226,7 @@ function TrainingContent() {
 
     try {
       setIsListening(true);
-      setAvatarState('thinking');
+      setAvatarState("thinking");
       setAvatarMessage("I'm listening... Speak your answer now!");
 
       const transcript = await speechRef.current.listen({
@@ -199,86 +239,110 @@ function TrainingContent() {
       // Process voice input
       handleVoiceInput(transcript);
     } catch (err) {
-      console.error('Listen error:', err);
+      console.error("Listen error:", err);
       setIsListening(false);
-      setAvatarState('idle');
-      setAvatarMessage("I couldn't hear you clearly. Please try again or type your response.");
+      setAvatarState("idle");
+      setAvatarMessage(
+        "I couldn't hear you clearly. Please try again or type your response.",
+      );
     }
   }, [isListening]);
 
-  const handleVoiceInput = useCallback(async (transcript) => {
-    setChatMessages(prev => [...prev, { role: 'user', text: transcript }]);
+  const handleVoiceInput = useCallback(
+    async (transcript) => {
+      setChatMessages((prev) => [...prev, { role: "user", text: transcript }]);
 
-    // Try to match quiz answer
-    if (showQuiz && !quizAnswered && lesson?.quiz) {
-      const lower = transcript.toLowerCase();
-      const labels = ['a', 'b', 'c', 'd'];
-      const matchedIndex = labels.findIndex(l => lower.includes(l));
+      // Try to match quiz answer
+      if (showQuiz && !quizAnswered && lesson?.quiz) {
+        const lower = transcript.toLowerCase();
+        const labels = ["a", "b", "c", "d"];
+        const matchedIndex = labels.findIndex((l) => lower.includes(l));
 
-      if (matchedIndex >= 0 && matchedIndex < lesson.quiz.options.length) {
-        // Will be handled by Quiz component
-        setAvatarMessage(`I heard you say "${transcript}". Let me check that answer...`);
-        return;
+        if (matchedIndex >= 0 && matchedIndex < lesson.quiz.options.length) {
+          // Will be handled by Quiz component
+          setAvatarMessage(
+            `I heard you say "${transcript}". Let me check that answer...`,
+          );
+          return;
+        }
       }
-    }
 
-    // Ask AI
-    setAvatarState('thinking');
-    setAvatarMessage("Let me think about that...");
-    const response = await aiRef.current?.askQuestion(transcript, lesson?.content);
-    setChatMessages(prev => [...prev, { role: 'avatar', text: response }]);
-    await speakText(response);
-  }, [showQuiz, quizAnswered, lesson, speakText]);
+      // Ask AI
+      setAvatarState("thinking");
+      setAvatarMessage("Let me think about that...");
+      const response = await aiRef.current?.askQuestion(
+        transcript,
+        lesson?.content,
+      );
+      setChatMessages((prev) => [...prev, { role: "avatar", text: response }]);
+      await speakText(response);
+    },
+    [showQuiz, quizAnswered, lesson, speakText],
+  );
 
-  const handleQuizAnswer = useCallback(async ({ isCorrect, explanation }) => {
-    setQuizAnswered(true);
+  const handleQuizAnswer = useCallback(
+    async ({ isCorrect, explanation }) => {
+      setQuizAnswered(true);
 
-    if (isCorrect) {
-      setAvatarState('happy');
-      const msg = `Excellent! That's correct! ${explanation}`;
-      await speakText(msg);
-      setCompletedLessons(prev => new Set([...prev, lesson.id]));
-    } else {
-      setAvatarState('thinking');
-      const msg = `Not quite, but that's okay! ${explanation}`;
-      await speakText(msg);
-    }
-  }, [lesson, speakText]);
+      if (isCorrect) {
+        setAvatarState("happy");
+        const msg = `Excellent! That's correct! ${explanation}`;
+        await speakText(msg);
+        setCompletedLessons((prev) => new Set([...prev, lesson.id]));
+      } else {
+        setAvatarState("thinking");
+        const msg = `Not quite, but that's okay! ${explanation}`;
+        await speakText(msg);
+      }
+    },
+    [lesson, speakText],
+  );
 
   const handleNextLesson = useCallback(() => {
     if (currentLessonIndex < module.lessons.length - 1) {
-      setCurrentLessonIndex(prev => prev + 1);
+      setCurrentLessonIndex((prev) => prev + 1);
       setShowQuiz(false);
       setQuizAnswered(false);
       setLessonStarted(false);
-      setAvatarState('idle');
-      setAvatarMessage(`Ready for the next lesson: "${module.lessons[currentLessonIndex + 1].title}". Press play when you're ready!`);
+      setAvatarState("idle");
+      setAvatarMessage(
+        `Ready for the next lesson: "${module.lessons[currentLessonIndex + 1].title}". Press play when you're ready!`,
+      );
       speechRef.current?.stop();
     } else {
-      setAvatarState('happy');
-      speakText(`Congratulations! You've completed all lessons in ${module.title}! You're doing amazing!`);
+      setAvatarState("happy");
+      speakText(
+        `Congratulations! You've completed all lessons in ${module.title}! You're doing amazing!`,
+      );
     }
   }, [currentLessonIndex, module, speakText]);
 
-  const handleChat = useCallback(async (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
+  const handleChat = useCallback(
+    async (e) => {
+      e.preventDefault();
+      if (!chatInput.trim()) return;
 
-    const userMsg = chatInput.trim();
-    setChatInput('');
-    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+      const userMsg = chatInput.trim();
+      setChatInput("");
+      setChatMessages((prev) => [...prev, { role: "user", text: userMsg }]);
 
-    setAvatarState('thinking');
-    setAvatarMessage("Let me think about that...");
+      setAvatarState("thinking");
+      setAvatarMessage("Let me think about that...");
 
-    const response = await aiRef.current?.askQuestion(userMsg, lesson?.content);
-    setChatMessages(prev => [...prev, { role: 'avatar', text: response }]);
-    await speakText(response);
-  }, [chatInput, lesson, speakText]);
+      const response = await aiRef.current?.askQuestion(
+        userMsg,
+        lesson?.content,
+      );
+      setChatMessages((prev) => [...prev, { role: "avatar", text: response }]);
+      await speakText(response);
+    },
+    [chatInput, lesson, speakText],
+  );
 
-  const progressPercent = module.lessons.length > 0
-    ? Math.round((completedLessons.size / module.lessons.length) * 100)
-    : 0;
+  const progressPercent =
+    module.lessons.length > 0
+      ? Math.round((completedLessons.size / module.lessons.length) * 100)
+      : 0;
 
   return (
     <div className={styles.page}>
@@ -294,18 +358,21 @@ function TrainingContent() {
                 window.location.href = `/training?module=${e.target.value}`;
               }}
             >
-              {trainingModules.map(m => (
-                <option key={m.id} value={m.id}>{m.icon} {m.title}</option>
+              {trainingModules.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.icon} {m.title}
+                </option>
               ))}
             </select>
           </div>
 
           <div className={styles.avatarContainer}>
             <TalkingAvatar
-              onReady={() => {}}
+              onReady={() => setAvatarReady(true)}
               onSpeakRef={speakRef}
               onResumeAudioRef={resumeAudioRef}
-              containerStyle={{ width: '100%', minHeight: 320 }}
+              onStopRef={stopRef}
+              containerStyle={{ width: "100%", minHeight: 320 }}
             />
             <div className={styles.avatarBubble}>
               {avatarMessage && <p>{avatarMessage}</p>}
@@ -319,6 +386,7 @@ function TrainingContent() {
             onPause={handlePause}
             onRepeat={handleRepeat}
             onMicToggle={handleMicToggle}
+            volume={volume}
             onVolumeChange={setVolume}
           />
 
@@ -327,19 +395,21 @@ function TrainingContent() {
             {module.lessons.map((l, i) => (
               <button
                 key={l.id}
-                className={`${styles.lessonDot} ${i === currentLessonIndex ? styles.dotActive : ''} ${completedLessons.has(l.id) ? styles.dotCompleted : ''}`}
+                className={`${styles.lessonDot} ${i === currentLessonIndex ? styles.dotActive : ""} ${completedLessons.has(l.id) ? styles.dotCompleted : ""}`}
                 onClick={() => {
                   setCurrentLessonIndex(i);
                   setShowQuiz(false);
                   setQuizAnswered(false);
                   setLessonStarted(false);
-                  setAvatarState('idle');
-                  setAvatarMessage(`Lesson: "${l.title}". Press play to begin!`);
+                  setAvatarState("idle");
+                  setAvatarMessage(
+                    `Lesson: "${l.title}". Press play to begin!`,
+                  );
                   speechRef.current?.stop();
                 }}
                 title={l.title}
               >
-                {completedLessons.has(l.id) ? '✓' : i + 1}
+                {completedLessons.has(l.id) ? "✓" : i + 1}
               </button>
             ))}
           </div>
@@ -350,10 +420,15 @@ function TrainingContent() {
           {/* Lesson header */}
           <div className={styles.lessonHeader}>
             <div className={styles.topBar}>
-              <span className={styles.moduleTag} style={{ color: module.color }}>
+              <span
+                className={styles.moduleTag}
+                style={{ color: module.color }}
+              >
                 {module.icon} {module.title}
               </span>
-              <span className={styles.progress}>{progressPercent}% complete</span>
+              <span className={styles.progress}>
+                {progressPercent}% complete
+              </span>
             </div>
             <h2 className={styles.lessonTitle}>{lesson?.title}</h2>
           </div>
@@ -389,8 +464,8 @@ function TrainingContent() {
           {quizAnswered && (
             <button className={styles.nextBtn} onClick={handleNextLesson}>
               {currentLessonIndex < module.lessons.length - 1
-                ? 'Next Lesson →'
-                : '🎉 Module Complete!'}
+                ? "Next Lesson →"
+                : "🎉 Module Complete!"}
             </button>
           )}
 
@@ -401,13 +476,17 @@ function TrainingContent() {
             <div className={styles.chatMessages}>
               {chatMessages.length === 0 && (
                 <p className={styles.chatPlaceholder}>
-                  Type a question or use the mic to ask the avatar anything about this topic...
+                  Type a question or use the mic to ask the avatar anything
+                  about this topic...
                 </p>
               )}
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`${styles.chatMsg} ${styles[msg.role]}`}>
+                <div
+                  key={i}
+                  className={`${styles.chatMsg} ${styles[msg.role]}`}
+                >
                   <span className={styles.chatRole}>
-                    {msg.role === 'user' ? '🧑' : '🤖'}
+                    {msg.role === "user" ? "🧑" : "🤖"}
                   </span>
                   <p>{msg.text}</p>
                 </div>
@@ -421,8 +500,13 @@ function TrainingContent() {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Type your question..."
+                disabled={isSpeaking}
               />
-              <button type="submit" className={styles.chatSend} disabled={!chatInput.trim()}>
+              <button
+                type="submit"
+                className={styles.chatSend}
+                disabled={!chatInput.trim() || isSpeaking}
+              >
                 Send
               </button>
             </form>
@@ -435,7 +519,13 @@ function TrainingContent() {
 
 export default function TrainingPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '2rem', color: '#94a3b8' }}>Loading training...</div>}>
+    <Suspense
+      fallback={
+        <div style={{ padding: "2rem", color: "#94a3b8" }}>
+          Loading training...
+        </div>
+      }
+    >
       <TrainingContent />
     </Suspense>
   );

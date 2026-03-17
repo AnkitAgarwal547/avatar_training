@@ -10,14 +10,16 @@ export default function AudioControls({
   onPause,
   onRepeat,
   onMicToggle,
+  volume: volumeProp,
   onVolumeChange,
   disabled = false,
 }) {
-  const [volume, setVolume] = useState(1);
+  const [internalVolume, setInternalVolume] = useState(1);
+  const volume = volumeProp !== undefined && volumeProp !== null ? volumeProp : internalVolume;
 
   const handleVolumeChange = (e) => {
     const v = parseFloat(e.target.value);
-    setVolume(v);
+    if (volumeProp === undefined || volumeProp === null) setInternalVolume(v);
     onVolumeChange?.(v);
   };
 

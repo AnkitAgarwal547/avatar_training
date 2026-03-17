@@ -17,7 +17,6 @@ function RoleplayContent() {
   const [wsStatus, setWsStatus] = useState("connecting"); // connecting | open | closed | error
   const [messages, setMessages] = useState([]);
   const [score, setScore] = useState(null);
-  const [exchangeCount, setExchangeCount] = useState(0);
   const [isAvatarReady, setIsAvatarReady] = useState(false);
   const [chatInput, setChatInput] = useState("");
 
@@ -26,6 +25,8 @@ function RoleplayContent() {
   const chunksRef = useRef([]);
   const speakRef = useRef(null);
   const resumeAudioRef = useRef(null);
+  const stopRef = useRef(null);
+  const currentAudioSourceRef = useRef(null);
   const audioCtxRef = useRef(null);
   const chatEndRef = useRef(null);
 
@@ -41,21 +42,32 @@ function RoleplayContent() {
     };
   }, []);
 
-  const playAudioSamples = useCallback(async (samples) => {
+  const playAudioSamples = useCallback((samples, onEnded) => {
     if (!audioCtxRef.current || !samples?.length) return;
     const ctx = audioCtxRef.current;
     try {
+      if (currentAudioSourceRef.current) {
+        try {
+          currentAudioSourceRef.current.stop(0);
+        } catch {}
+        currentAudioSourceRef.current = null;
+      }
       if (ctx.state === "suspended") {
-        await ctx.resume().catch(() => {});
+        ctx.resume().catch(() => {});
       }
       const buffer = ctx.createBuffer(1, samples.length, 24000);
       buffer.getChannelData(0).set(samples);
       const src = ctx.createBufferSource();
       src.buffer = buffer;
       src.connect(ctx.destination);
+      src.onended = () => {
+        currentAudioSourceRef.current = null;
+        onEnded?.();
+      };
+      currentAudioSourceRef.current = src;
       src.start();
     } catch {
-      // best-effort fallback; ignore playback errors
+      onEnded?.();
     }
   }, []);
 
@@ -78,27 +90,34 @@ function RoleplayContent() {
         if (msg.type === "connected") return;
 
         if (msg.type === "response") {
-          setExchangeCount(msg.exchangeCount);
-          setMessages((prev) => [
-            ...prev,
-            { role: "user", text: msg.userText },
-            { role: "avatar", text: msg.text },
-          ]);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            const alreadyShowedUser =
+              last?.role === "user" && last?.text === msg.userText;
+            return [
+              ...prev,
+              ...(alreadyShowedUser ? [] : [{ role: "user", text: msg.userText }]),
+              { role: "avatar", text: msg.text },
+            ];
+          });
 
           if (
             speakRef.current &&
             Array.isArray(msg.audio) &&
             msg.audio.length > 0
           ) {
+            if (currentAudioSourceRef.current) {
+              try {
+                currentAudioSourceRef.current.stop(0);
+              } catch {}
+              currentAudioSourceRef.current = null;
+            }
             setStatus("speaking");
             const samples = new Float32Array(msg.audio);
-            // TalkingHead lip-sync: pass 24k samples + phonemes and sampleRate so timing matches
             await speakRef.current(samples, msg.phonemes ?? [], {
               sampleRate: 24000,
             });
-            // Also play via Web Audio so you reliably hear it
-            playAudioSamples(samples);
-            setStatus("idle");
+            playAudioSamples(samples, () => setStatus("idle"));
           }
           return;
         }
@@ -180,6 +199,7 @@ function RoleplayContent() {
     (text) => {
       const trimmed = (text ?? "").trim();
       if (!trimmed || wsStatus !== "open" || !wsRef.current) return;
+      setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
       wsRef.current.send(JSON.stringify({ type: "text", text: trimmed }));
       setStatus("processing");
       setChatInput("");
@@ -198,7 +218,6 @@ function RoleplayContent() {
   const handleRetry = useCallback(() => {
     setScore(null);
     setMessages([]);
-    setExchangeCount(0);
     setStatus("idle");
     wsRef.current?.close(); // triggers reconnect → fresh session
   }, []);
@@ -232,6 +251,7 @@ function RoleplayContent() {
               onReady={() => setIsAvatarReady(true)}
               onSpeakRef={speakRef}
               onResumeAudioRef={resumeAudioRef}
+              onStopRef={stopRef}
               containerStyle={{ height: "100%" }}
             />
             {!isAvatarReady && (
@@ -240,19 +260,6 @@ function RoleplayContent() {
                 <p>Loading 3D Avatar...</p>
               </div>
             )}
-          </div>
-
-          {/* Exchange progress dots */}
-          <div className={styles.exchangeRow}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className={`${styles.exchangeDot} ${i < exchangeCount ? styles.dotFilled : ""}`}
-              />
-            ))}
-            <span className={styles.exchangeLabel}>
-              {exchangeCount}/4 exchanges
-            </span>
           </div>
 
           {/* Mic hold-to-speak button */}
@@ -267,9 +274,7 @@ function RoleplayContent() {
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
               disabled={
-                status === "processing" ||
-                status === "speaking" ||
-                wsStatus !== "open"
+                status === "speaking" || wsStatus !== "open"
               }
               aria-label={
                 status === "recording"
@@ -333,11 +338,7 @@ function RoleplayContent() {
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Type a message..."
-              disabled={
-                status === "processing" ||
-                status === "speaking" ||
-                wsStatus !== "open"
-              }
+              disabled={status === "speaking" || wsStatus !== "open"}
               aria-label="Chat message"
             />
             <button
@@ -345,7 +346,6 @@ function RoleplayContent() {
               className={styles.chatSend}
               disabled={
                 !chatInput.trim() ||
-                status === "processing" ||
                 status === "speaking" ||
                 wsStatus !== "open"
               }

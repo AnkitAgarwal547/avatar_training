@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from "react";
 
 // TalkingHead is not on npm — load it from jsDelivr CDN
 const TALKING_HEAD_CDN =
-  'https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs';
+  "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs";
 
 // Sample avatar from the TalkingHead repo — works out of the box, no local file needed
 const DEFAULT_AVATAR_URL =
-  'https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureSizeLimit=1024&textureFormat=png';
+  "https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureSizeLimit=1024&textureFormat=png";
 
 function loadTalkingHeadScript() {
   return new Promise((resolve, reject) => {
@@ -28,15 +28,16 @@ function loadTalkingHeadScript() {
 /** Resolve and resume the TalkingHead AudioContext (must be called inside a user gesture). */
 function resumeHeadAudioContext(head) {
   if (!head) return;
-  const ctx = head.audioContext ?? head._audioContext ?? head.getAudioContext?.();
-  if (ctx?.resume && ctx.state === 'suspended') {
+  const ctx =
+    head.audioContext ?? head._audioContext ?? head.getAudioContext?.();
+  if (ctx?.resume && ctx.state === "suspended") {
     ctx.resume().catch(() => {});
   }
 }
 
 /** Oculus viseme IDs (no "viseme_" prefix – TalkingHead prepends it). */
-const VISEME_SIL = 'sil';
-const VISEME_AA = 'aa';
+const VISEME_SIL = "sil";
+const VISEME_AA = "aa";
 
 /**
  * TalkingHead expects audio as array of ArrayBuffers containing Int16 PCM.
@@ -48,7 +49,7 @@ function float32ToInt16Pcm(samples) {
   const view = new Int16Array(buf);
   for (let i = 0; i < n; i++) {
     const s = Math.max(-1, Math.min(1, samples[i]));
-    view[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    view[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   return [buf];
 }
@@ -95,12 +96,13 @@ export default function TalkingAvatar({
   onReady,
   onSpeakRef,
   onResumeAudioRef,
+  onStopRef,
   avatarUrl,
 }) {
   const containerRef = useRef(null);
   const headRef = useRef(null);
-  const [loadState, setLoadState] = useState('loading'); // loading | ready | error
-  const [errorMsg, setErrorMsg] = useState('');
+  const [loadState, setLoadState] = useState("loading"); // loading | ready | error
+  const [errorMsg, setErrorMsg] = useState("");
 
   // Use the sample avatar if no local one is specified
   const resolvedAvatarUrl = avatarUrl || DEFAULT_AVATAR_URL;
@@ -108,7 +110,7 @@ export default function TalkingAvatar({
   const speak = useCallback(async (audio, phonemes, options = {}) => {
     if (!headRef.current) return;
     if (!audio?.length) {
-      console.warn('[TalkingAvatar] No audio samples to play');
+      console.warn("[TalkingAvatar] No audio samples to play");
       return;
     }
     try {
@@ -124,7 +126,7 @@ export default function TalkingAvatar({
       const hasPhonemeTiming =
         Array.isArray(phonemes) &&
         phonemes.length > 0 &&
-        (typeof phonemes[0] === 'object' ? phonemes[0].start != null : false);
+        (typeof phonemes[0] === "object" ? phonemes[0].start != null : false);
       let lipSync = {};
       if (hasPhonemeTiming) {
         // Server sent timed phonemes – map to visemes if needed (format varies by TTS).
@@ -133,7 +135,7 @@ export default function TalkingAvatar({
         const { visemes, vtimes, vdurations } = audioEnvelopeToVisemes(
           samples,
           sampleRate,
-          50
+          50,
         );
         lipSync = { visemes, vtimes, vdurations };
       }
@@ -144,20 +146,32 @@ export default function TalkingAvatar({
       const payload = {
         audio: audioForHead,
         sampleRate,
-        words: [' '], // required so the library enters the lip-sync block
+        words: [" "], // required so the library enters the lip-sync block
         wtimes: [0],
         wdurations: [Math.max(50, totalDurationMs)],
         ...lipSync,
         ...options,
       };
-      await headRef.current.speakAudio(payload, { lipsyncLang: 'en' });
+      await headRef.current.speakAudio(payload, { lipsyncLang: "en" });
     } catch (err) {
-      console.error('[TalkingAvatar] speakAudio error:', err);
+      console.error("[TalkingAvatar] speakAudio error:", err);
     }
   }, []);
 
   const resumeAudio = useCallback(() => {
     resumeHeadAudioContext(headRef.current);
+  }, []);
+
+  const stop = useCallback(() => {
+    const head = headRef.current;
+    if (!head) return;
+    try {
+      if (typeof head.streamStop === "function") head.streamStop();
+      else if (typeof head.stop === "function") head.stop();
+      else if (typeof head.stopAudio === "function") head.stopAudio();
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {
@@ -167,6 +181,13 @@ export default function TalkingAvatar({
   useEffect(() => {
     if (onResumeAudioRef) onResumeAudioRef.current = resumeAudio;
   }, [resumeAudio, onResumeAudioRef]);
+
+  useEffect(() => {
+    if (onStopRef) onStopRef.current = stop;
+    return () => {
+      if (onStopRef) onStopRef.current = null;
+    };
+  }, [stop, onStopRef]);
 
   // Use a ref for onReady so it doesn't trigger effect re-runs if the parent
   // passes an inline function (which changes identity every render).
@@ -181,23 +202,24 @@ export default function TalkingAvatar({
 
     async function initHead() {
       try {
-        setLoadState('loading');
+        setLoadState("loading");
 
         // Step 1 — load TalkingHead from CDN
         const mod = await loadTalkingHeadScript();
         if (cancelled) return;
 
         const TalkingHead = mod.TalkingHead ?? mod.default;
-        if (!TalkingHead) throw new Error('TalkingHead class not found in CDN module');
+        if (!TalkingHead)
+          throw new Error("TalkingHead class not found in CDN module");
 
         // Step 2 — create the 3D scene
         // ttsEndpoint is required by TalkingHead even if we only use speakAudio().
         // We point it to our own Kokoro TTS route so it never calls Google.
         const head = new TalkingHead(containerRef.current, {
-          cameraView: 'upper',
-          avatarMood: 'happy',
-          ttsEndpoint: '/api/tts-proxy',  // handled below — just needs to be a valid URL
-          ttsApikey: '',
+          cameraView: "upper",
+          avatarMood: "happy",
+          ttsEndpoint: "/api/tts-proxy", // handled below — just needs to be a valid URL
+          ttsApikey: "",
           ttsTrimStart: 0,
           ttsTrimEnd: 0,
           pcmSampleRate: 24000, // Kokoro TTS is 24 kHz
@@ -206,21 +228,21 @@ export default function TalkingAvatar({
         // Step 3 — load the avatar model
         await head.showAvatar({
           url: resolvedAvatarUrl,
-          body: 'F',
-          avatarMood: 'happy',
+          body: "F",
+          avatarMood: "happy",
         });
 
         if (cancelled) return;
 
         headRef.current = head;
-        setLoadState('ready');
+        setLoadState("ready");
         onReadyRef.current?.();
       } catch (err) {
         if (cancelled) return;
         const msg = err?.message || String(err);
-        console.error('[TalkingAvatar] Failed to load:', msg);
+        console.error("[TalkingAvatar] Failed to load:", msg);
         setErrorMsg(msg);
-        setLoadState('error');
+        setLoadState("error");
       }
     }
 
@@ -231,55 +253,69 @@ export default function TalkingAvatar({
     };
   }, [resolvedAvatarUrl]); // removed onReady from deps, relying on the ref
 
-  const isOverlayVisible = loadState !== 'ready';
+  const isOverlayVisible = loadState !== "ready";
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Three.js render target */}
       <div
         ref={containerRef}
         style={{
-          width: '100%',
-          height: '100%',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
+          width: "100%",
+          height: "100%",
+          borderRadius: "16px",
+          overflow: "hidden",
+          background: "linear-gradient(135deg, #0f0c29, #302b63, #24243e)",
           ...containerStyle,
         }}
       />
 
       {/* Loading / error overlay */}
       {isOverlayVisible && (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          gap: '1rem',
-          background: 'rgba(10,10,20,0.92)',
-          borderRadius: '16px',
-          color: loadState === 'error' ? '#f87171' : 'rgba(255,255,255,0.5)',
-          fontSize: '0.9rem',
-          padding: '1.5rem',
-          textAlign: 'center',
-        }}>
-          {loadState === 'loading' ? (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "1rem",
+            background: "rgba(10,10,20,0.92)",
+            borderRadius: "16px",
+            color: loadState === "error" ? "#f87171" : "rgba(255,255,255,0.5)",
+            fontSize: "0.9rem",
+            padding: "1.5rem",
+            textAlign: "center",
+          }}
+        >
+          {loadState === "loading" ? (
             <>
-              <div style={{
-                width: 36, height: 36,
-                border: '3px solid rgba(255,255,255,0.1)',
-                borderTopColor: '#6366f1',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite',
-              }} />
+              <div
+                style={{
+                  width: 36,
+                  height: 36,
+                  border: "3px solid rgba(255,255,255,0.1)",
+                  borderTopColor: "#6366f1",
+                  borderRadius: "50%",
+                  animation: "spin 0.8s linear infinite",
+                }}
+              />
               <p>Loading 3D Avatar from CDN…</p>
-              <p style={{ fontSize: '0.75rem', opacity: 0.5 }}>First load may take a few seconds</p>
+              <p style={{ fontSize: "0.75rem", opacity: 0.5 }}>
+                First load may take a few seconds
+              </p>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </>
           ) : (
             <>
-              <span style={{ fontSize: '2rem' }}>⚠️</span>
-              <p><strong>Avatar failed to load</strong></p>
-              <p style={{ fontSize: '0.78rem', maxWidth: 280, opacity: 0.7 }}>{errorMsg}</p>
+              <span style={{ fontSize: "2rem" }}>⚠️</span>
+              <p>
+                <strong>Avatar failed to load</strong>
+              </p>
+              <p style={{ fontSize: "0.78rem", maxWidth: 280, opacity: 0.7 }}>
+                {errorMsg}
+              </p>
             </>
           )}
         </div>
@@ -287,4 +323,3 @@ export default function TalkingAvatar({
     </div>
   );
 }
-
