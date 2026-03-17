@@ -2,6 +2,37 @@
 
 Next.js web application for an **AI-powered corporate training platform** with a 3D talking avatar, voice interaction, and live roleplay.
 
+## Project description
+
+**Avatar Training** is a corporate learning platform that uses an AI-driven 3D talking avatar to deliver lessons, answer questions, and run practice conversations. Learners can follow structured training modules with voice and quizzes, then apply skills in real-time roleplay with an AI customer. The frontend is a Next.js app; voice, TTS, and roleplay logic run on a Node.js backend (WebSocket + HTTP).
+
+---
+
+### Training module
+
+The **Training** module is a guided, module-based learning flow. Learners pick a topic (e.g. Workplace Safety, Customer Service, Compliance), move through lessons in order, and get spoken explanations from a 3D avatar with lip-sync (Kokoro TTS). Each lesson includes:
+
+- **Spoken lesson** — The avatar reads the lesson script; playback autoplays when the lesson loads and can be repeated. Volume is adjustable.
+- **On-screen content** — Written lesson text and bullet-point summaries.
+- **Quiz** — A short multiple-choice quiz after the lesson; the avatar reads the question and gives spoken feedback on the answer.
+- **Ask the Avatar** — A chat area where learners can type or use the microphone to ask follow-up questions; the avatar answers using the lesson context (OpenAI) and speaks the reply via TTS.
+
+Learners advance lesson-by-lesson and can switch modules from a dropdown. Progress is reflected per lesson (e.g. completed checkmarks). Training works best with the Node backend for Kokoro TTS; it can fall back to browser SpeechSynthesis if the TTS API is unavailable.
+
+---
+
+### Roleplay module
+
+The **Roleplay** module is a live practice session for **customer complaint handling** using the **L-A-S-T** method (Listen, Apologise, Solve, Thank). Learners talk to **Priya**, an AI trainer. Priya plays **Meena**, an upset customer; the learner’s goal is to de-escalate and resolve the situation.
+
+- **Voice or text** — Learners can hold a button to speak (audio is sent to the backend, transcribed with Whisper, then answered by GPT-4o) or type in the chat. The AI reply is spoken back by the avatar with lip-sync (Kokoro TTS) and shown in the chat.
+- **Continuous conversation** — The dialogue continues without a fixed turn limit; the AI stays in character as Meena and adjusts frustration based on whether the learner listens, apologises, and offers a clear solution.
+- **Same 3D avatar** — The same TalkingHead avatar used in Training is used here for consistent branding and a single “AI trainer” experience.
+
+The roleplay flow depends on the Node backend (WebSocket for audio/text, Whisper for STT, OpenAI for dialogue, Kokoro for TTS). The text input is disabled while the AI is speaking so learners don’t send during playback and avoid overlapping audio.
+
+---
+
 ## Purpose
 
 This frontend delivers:
