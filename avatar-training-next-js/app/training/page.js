@@ -15,7 +15,7 @@ import { getSpeechService } from "../services/SpeechService";
 import { getAIService } from "../services/AIService";
 import { trainingModules, getModuleById } from "../data/trainingData";
 import styles from "./training.module.css";
-import { redirect } from "next/dist/server/api-utils";
+import { redirect } from "next/navigation";
 
 // Reuse the 3D TalkingAvatar from the roleplay page
 const TalkingAvatar = dynamic(() => import("../components/TalkingAvatar"), {
