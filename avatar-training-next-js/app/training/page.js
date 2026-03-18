@@ -15,6 +15,7 @@ import { getSpeechService } from "../services/SpeechService";
 import { getAIService } from "../services/AIService";
 import { trainingModules, getModuleById } from "../data/trainingData";
 import styles from "./training.module.css";
+import { redirect } from "next/dist/server/api-utils";
 
 // Reuse the 3D TalkingAvatar from the roleplay page
 const TalkingAvatar = dynamic(() => import("../components/TalkingAvatar"), {
@@ -356,7 +357,7 @@ function TrainingContent() {
               className={styles.select}
               value={moduleId}
               onChange={(e) => {
-                window.location.href = `/training?module=${e.target.value}`;
+                redirect(`/training?module=${e.target.value}`);
               }}
             >
               {trainingModules.map((m) => (
