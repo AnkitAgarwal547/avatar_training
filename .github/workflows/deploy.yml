@@ -1,0 +1,110 @@
+name: Deploy AI Avatar on Production
+
+env:
+  DEPLOY_HOST: 134.209.43.88
+  DEPLOY_USER: root
+  APP_PATH: /var/www/app.avatar-training
+
+  SSH_PRIVATE_KEY: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAACFwAAAAdzc2gtcn
+    NhAAAAAwEAAQAAAgEAqFBNjbHP5IQPQGvkCQdo+AvknLOHQkl9IBCPZG0pl0SmuqlCbEf9
+    Tfx60BQt8GMlV71HMoGTs/nsz4vEdEvZqg95ILPLPC0rfERZYf05Q0wf/TSGGZVk0PR0pa
+    COlSSJwWR8YhYVj0v97Q8LM20SHyZjiOubJRmv+bb1vFGAfoT6aSXFni52loxrwNLzyA6f
+    kT0ESSIh3PG4pe3GODcDzTzKDf256uiBm0xM1T+4eJArlJOn/G20trTnGLcmUdzICJ+Q9h
+    mKqfRNdTvImsGmeUi68GmOabmwdt5rywF0oDTIy6Zkcqqa1OY0NXHaje26q530xHmHwTel
+    i9s2ouShVBtrX7SzaPOpP8AsnZOOmpGXAhZCONwvcBTlBOlDWPT29AJ6/X/szQwPZ2Jd3b
+    xQEZnpLWT6uiBVdEgdp3EFM/7PM4ZVtDZ/BxBpKCkLtNWOmbZgmJOdiMETLnw5XW1dZJLZ
+    jpuPGScO+NpPCt/2vK9S5Vhj5ReCVuzmO3Yw2s3k73dxEM8x07r8FY4rRaRZ+TDV3gnquy
+    ro2ZuMXLAgRY4ZvY1NnGp2AFtSPITt3WllsUYcUUzsT2O2fRh/C2gb24qlDsB1lFkJeBhL
+    dQF29yyiWEjY7Rxez34wXk7nQqzAAWfu08z6T1IZBkx74e/Y84RjvFM52hxzQkxbnBVi3L
+    cAAAdQjkwdco5MHXIAAAAHc3NoLXJzYQAAAgEAqFBNjbHP5IQPQGvkCQdo+AvknLOHQkl9
+    IBCPZG0pl0SmuqlCbEf9Tfx60BQt8GMlV71HMoGTs/nsz4vEdEvZqg95ILPLPC0rfERZYf
+    05Q0wf/TSGGZVk0PR0paCOlSSJwWR8YhYVj0v97Q8LM20SHyZjiOubJRmv+bb1vFGAfoT6
+    aSXFni52loxrwNLzyA6fkT0ESSIh3PG4pe3GODcDzTzKDf256uiBm0xM1T+4eJArlJOn/G
+    20trTnGLcmUdzICJ+Q9hmKqfRNdTvImsGmeUi68GmOabmwdt5rywF0oDTIy6Zkcqqa1OY0
+    NXHaje26q530xHmHwTeli9s2ouShVBtrX7SzaPOpP8AsnZOOmpGXAhZCONwvcBTlBOlDWP
+    T29AJ6/X/szQwPZ2Jd3bxQEZnpLWT6uiBVdEgdp3EFM/7PM4ZVtDZ/BxBpKCkLtNWOmbZg
+    mJOdiMETLnw5XW1dZJLZjpuPGScO+NpPCt/2vK9S5Vhj5ReCVuzmO3Yw2s3k73dxEM8x07
+    r8FY4rRaRZ+TDV3gnquyro2ZuMXLAgRY4ZvY1NnGp2AFtSPITt3WllsUYcUUzsT2O2fRh/
+    C2gb24qlDsB1lFkJeBhLdQF29yyiWEjY7Rxez34wXk7nQqzAAWfu08z6T1IZBkx74e/Y84
+    RjvFM52hxzQkxbnBVi3LcAAAADAQABAAACADGuAjYglcxNbnMFZXmExmbwm7nlA7d9GYGt
+    YaWy0uPjT5MpAoITfaDXNSjVy/l4Sj1rkOhHduFYk51vE71/5e9cQdR1PTe13XAAfKF/rL
+    dAcPC74BkND4TdotCAY5WCA2ch0dThz9tMAtdF6Xh0aTToj9iKMnDw9BAxALdlFxhBB+ih
+    TYMzE628JNH1ch9Ksa6c4/byLCya7HWNiURueKDLoJggnA/KMPc1vjfzZu+vHi3sp1jKyN
+    xk6RFSfe0Lzb892fvJ7jPb+EDyNHP5VLnXzdXIUlDCjmOHoyl4dIQVEG+L3Xo7ARh2GlLs
+    GCZsVPzy0pxrgrZ1RlfRjH7oHPXLC2XnmreosQqv5tetvWaMBGDUY56uwTovdASFk8Vleg
+    EU5HFXsGnDmLtemk79QwIWbUFb/CV9yJ2A0+Z3tWQ586s8NzP9Zkv+myT4AwNlPpiGLU8N
+    1CC8ArHTDaPPkoak9vkt0nkV9YZz9vSnIUuyJM6rYafWROdUm650Z9qeYmfoTWDRqU+zeV
+    +mH3YBrogecwVjx4+KVeBvUQe8JHzDXzqWTwYsU2KXJA67mi7Utac3nfSD0j7+YUuJ1a60
+    ky+cQ49oc0MzwGIR20JUw0pXIB7aEFwmMV4wpx8k80HJw0jCsgMOLQxggfP7kG9FZ/G4NQ
+    3eAZfe/Lg1ZytxaDQBAAABAQCSdg0gC2cI1l4ZBTAjF7swf8SjxcQur4WfEab0FhOqQ9ge
+    W2hLEkmgyGulV7ZQkcYJCPflfaXMLsLenRXWs5LH5jO034RHRxXuxbBxz9DULlOjYxvuxU
+    KhW9XyrGs4VLkk0L3+GbQk94EsMDSp7hX4lKBaPrs0rFXO8FcEt/jauWjK5rSly94kl+kR
+    J55oSQMurj6Xaxbwaq7nRzl3yDEdGhCoXb4elk0nukP5M3r5tlfeKBE/7hgnuvc9sCKsUs
+    5u8HMv3KbMituidj0faqfblOAY+1M3ezFiPcNMvPri6sipgD9qhgl4sEi3BiKIhYrZT1gs
+    5tcR11AM6t9uAQMmAAABAQC5L4ikH/bRJPRT6zk+kkFx+EsxAuLtyVOSqyfT8dck36uH2T
+    dYJInvdCBHxCJ7NQGsjPk5HM8SX3VfQESgt15yE8JWQmUQwPWLsvjv5L81ruv8HSXvD0ic
+    m4lzQL2yUlzCtbsiFDq0C7N4Qjt+975hwB7hXdWKKfwYffNLcRJGITkGaE3/4GBLs5YlE4
+    Gm18Iym1/Lf3pmYyLFtRAXny52l0t2YHuoLyR3uS2nhYrXfmNEgS5Nhwqfu/JJSCQkXAuC
+    QDR3IVWQn5RWZWlziWpWU2n+nDkFCSTeLiZgsENEN25qVoVahx5/S7sKirPxpT2jsBeNW0
+    xgxEn9uODkGv/hAAABAQDorRx6OoXIMrpdabwlRp0uTCzu7cXpvd4I63cbWWh+J0n50VWO
+    4QRh0HCCR9FjK5ZCs8NmjaWus1u9pnKKe5/8pBTeTzr4gSxYXMfZjKhwoNHfdBR7AvDyqW
+    72xKfQWHJu+vvauoNJh3KSJodpLOeZy4MgoJeZdS8VlcQ/oOGlPIkytg9DOHJrI9MOekdB
+    16FUQumCN8FFnX+2e7tgOuJ5mcO/+8jyN2p3Tt6XaeDgnQk5pmkP0n3tsEzVII6ekB1Tu7
+    m7AD1raPc1VcqMXw61/A8v/buglBLG5kVSjOCIcJ0TQxvWZHDNh8g4Wuisy9xp0rCXFK7B
+    +Z7sLq8Cb8+XAAAAFWdpdGh1Yi1hY3Rpb25zLWRlcGxveQECAwQF
+    -----END OPENSSH PRIVATE KEY-----
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+
+      - name: Add host to known_hosts
+        run: ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ env.DEPLOY_HOST }}
+          username: ${{ env.DEPLOY_USER }}
+          key: ${{ env.SSH_PRIVATE_KEY }}
+          envs: APP_PATH
+          script: |
+            set -e
+            cd $APP_PATH
+
+            pm2 stop avatar-backend || true
+            pm2 stop avatar-frontend || true
+
+            git fetch origin main
+            git reset --hard origin/main
+
+            cd avatar-training-node-js
+            npm install
+            pm2 restart avatar-backend || pm2 start "npm start" --name avatar-backend
+            pm2 save
+
+            cd $APP_PATH/avatar-training-next-js
+            npm install
+            npm run build
+            pm2 restart avatar-frontend || pm2 start "npm run start:prod" --name avatar-frontend
+            pm2 save
+
+            if [ -f $APP_PATH/ai.deaninfotech.com ]; then
+              sudo cp $APP_PATH/ai.deaninfotech.com /etc/nginx/sites-available/ai.deaninfotech.com
+              sudo nginx -t && sudo systemctl reload nginx
+            fi
+
+            echo "Deployment of AI Avatar to $APP_PATH completed successfully."
