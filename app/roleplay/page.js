@@ -96,7 +96,9 @@ function RoleplayContent() {
               last?.role === "user" && last?.text === msg.userText;
             return [
               ...prev,
-              ...(alreadyShowedUser ? [] : [{ role: "user", text: msg.userText }]),
+              ...(alreadyShowedUser
+                ? []
+                : [{ role: "user", text: msg.userText }]),
               { role: "avatar", text: msg.text },
             ];
           });
@@ -142,7 +144,16 @@ function RoleplayContent() {
     }
 
     connect();
-    return () => wsRef.current?.close();
+    return () => {
+      if (currentAudioSourceRef.current) {
+        try {
+          currentAudioSourceRef.current.stop(0);
+        } catch {}
+        currentAudioSourceRef.current = null;
+      }
+      stopRef.current?.();
+      wsRef.current?.close();
+    };
   }, []);
 
   // Auto-scroll chat
@@ -273,9 +284,7 @@ function RoleplayContent() {
               onMouseUp={stopRecording}
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
-              disabled={
-                status === "speaking" || wsStatus !== "open"
-              }
+              disabled={status === "speaking" || wsStatus !== "open"}
               aria-label={
                 status === "recording"
                   ? "Recording — release to send"

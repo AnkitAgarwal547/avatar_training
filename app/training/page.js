@@ -54,13 +54,14 @@ function TrainingContent() {
 
   const lesson = module.lessons[currentLessonIndex];
 
-  // Initialize services
+  // Initialize services + stop all audio on unmount (e.g. navigate away)
   useEffect(() => {
     speechRef.current = getSpeechService();
     aiRef.current = getAIService();
 
     return () => {
       speechRef.current?.stop();
+      stopRef.current?.();
     };
   }, []);
 

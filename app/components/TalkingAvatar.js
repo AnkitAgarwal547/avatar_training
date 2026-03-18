@@ -91,18 +91,32 @@ function audioEnvelopeToVisemes(samples, sampleRate, windowMs = 50) {
   return { visemes, vtimes, vdurations };
 }
 
+/** Supported expression/mood values: "neutral" | "happy" | "angry" (TalkingHead setMood). */
+
 export default function TalkingAvatar({
   containerStyle,
   onReady,
   onSpeakRef,
   onResumeAudioRef,
   onStopRef,
+  onExpressionRef,
+  expression: initialExpression = "happy",
   avatarUrl,
 }) {
   const containerRef = useRef(null);
   const headRef = useRef(null);
   const [loadState, setLoadState] = useState("loading"); // loading | ready | error
   const [errorMsg, setErrorMsg] = useState("");
+
+  const setExpression = useCallback((expression) => {
+    const head = headRef.current;
+    if (!head || typeof head.setMood !== "function") return;
+    try {
+      head.setMood(expression);
+    } catch (err) {
+      console.warn("[TalkingAvatar] setMood failed:", err);
+    }
+  }, []);
 
   // Use the sample avatar if no local one is specified
   const resolvedAvatarUrl = avatarUrl || DEFAULT_AVATAR_URL;
@@ -183,9 +197,17 @@ export default function TalkingAvatar({
   }, [resumeAudio, onResumeAudioRef]);
 
   useEffect(() => {
+    if (onExpressionRef) onExpressionRef.current = setExpression;
+    return () => {
+      if (onExpressionRef) onExpressionRef.current = null;
+    };
+  }, [setExpression, onExpressionRef]);
+
+  useEffect(() => {
     if (onStopRef) onStopRef.current = stop;
     return () => {
       if (onStopRef) onStopRef.current = null;
+      stop();
     };
   }, [stop, onStopRef]);
 
@@ -217,7 +239,7 @@ export default function TalkingAvatar({
         // We point it to our own Kokoro TTS route so it never calls Google.
         const head = new TalkingHead(containerRef.current, {
           cameraView: "upper",
-          avatarMood: "happy",
+          avatarMood: initialExpression,
           ttsEndpoint: "/api/tts-proxy", // handled below — just needs to be a valid URL
           ttsApikey: "",
           ttsTrimStart: 0,
@@ -229,7 +251,7 @@ export default function TalkingAvatar({
         await head.showAvatar({
           url: resolvedAvatarUrl,
           body: "F",
-          avatarMood: "happy",
+          avatarMood: initialExpression,
         });
 
         if (cancelled) return;
@@ -249,9 +271,17 @@ export default function TalkingAvatar({
     initHead();
     return () => {
       cancelled = true;
+      const head = headRef.current;
+      if (head) {
+        try {
+          if (typeof head.streamStop === "function") head.streamStop();
+          else if (typeof head.stop === "function") head.stop();
+          else if (typeof head.stopAudio === "function") head.stopAudio();
+        } catch {}
+      }
       headRef.current = null;
     };
-  }, [resolvedAvatarUrl]); // removed onReady from deps, relying on the ref
+  }, [resolvedAvatarUrl, initialExpression]); // removed onReady from deps, relying on the ref
 
   const isOverlayVisible = loadState !== "ready";
 
