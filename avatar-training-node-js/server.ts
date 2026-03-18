@@ -1,16 +1,16 @@
-import { createServer } from 'http';
-import { WebSocketServer, WebSocket } from 'ws';
-import { transcribe } from './lib/whisper.js';
-import { initTTS, synthesise } from './lib/kokoro.js';
-import { chat, tryParseScore, Message } from './lib/openai.js';
+import { createServer } from "http";
+import { WebSocketServer, WebSocket } from "ws";
+import { transcribe } from "./lib/whisper.js";
+import { initTTS, synthesise } from "./lib/kokoro.js";
+import { chat, tryParseScore, Message } from "./lib/openai.js";
 
 // Load env vars: .env.local (dev) or .env (production)
-import { config } from 'dotenv';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
-const envPath = existsSync(resolve(process.cwd(), '.env.local'))
-  ? '.env.local'
-  : '.env';
+import { config } from "dotenv";
+import { existsSync } from "fs";
+import { resolve } from "path";
+const envPath = existsSync(resolve(process.cwd(), ".env.local"))
+  ? ".env.local"
+  : ".env";
 config({ path: envPath });
 
 interface Session {
@@ -21,23 +21,23 @@ interface Session {
 }
 
 type IncomingMessage =
-  | { type: 'audio'; audio: number[] }
-  | { type: 'text'; text: string };
+  | { type: "audio"; audio: number[] }
+  | { type: "text"; text: string };
 
 /** Strip markdown for TTS and chat display (no "**text**" or "** **" in message). */
 function stripMarkdownForTTS(text: string): string {
   return (
     text
       // **bold** and *italic* and __bold__ and _italic_
-      .replace(/\*{2}([^*]*)\*{2}/g, '$1')
-      .replace(/\*{1}([^*]*)\*{1}/g, '$1')
-      .replace(/_{2}([^_]*)_{2}/g, '$1')
-      .replace(/_{1}([^_]*)_{1}/g, '$1')
+      .replace(/\*{2}([^*]*)\*{2}/g, "$1")
+      .replace(/\*{1}([^*]*)\*{1}/g, "$1")
+      .replace(/_{2}([^_]*)_{2}/g, "$1")
+      .replace(/_{1}([^_]*)_{1}/g, "$1")
       // `code`
-      .replace(/`([^`]*)`/g, '$1')
+      .replace(/`([^`]*)`/g, "$1")
       // Remove any leftover standalone ** or * (e.g. empty bold "** **")
-      .replace(/\*{2}\s*\*{2}/g, '')
-      .replace(/\*{1}\s*\*{1}/g, '')
+      .replace(/\*{2}\s*\*{2}/g, "")
+      .replace(/\*{1}\s*\*{1}/g, "")
       .trim()
   );
 }
@@ -82,11 +82,18 @@ class Semaphore {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   if (!Number.isFinite(ms) || ms <= 0) return promise;
   let timer: NodeJS.Timeout | null = null;
   const timeoutPromise = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)),
+      ms,
+    );
   });
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timer) clearTimeout(timer);
@@ -94,18 +101,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 // Pre-warm Kokoro TTS model before accepting connections
-console.log('🔄 Loading Kokoro TTS model (this may take a moment on first run)...');
+console.log(
+  "🔄 Loading Kokoro TTS model (this may take a moment on first run)...",
+);
 await initTTS();
 
 const sessions = new Map<string, Session>();
 
 // CPU-only friendly concurrency limits (tune as needed).
-const STT_CONCURRENCY = parseInt(process.env.STT_CONCURRENCY ?? '1', 10) || 1;
-const TTS_CONCURRENCY = parseInt(process.env.TTS_CONCURRENCY ?? '1', 10) || 1;
+const STT_CONCURRENCY = parseInt(process.env.STT_CONCURRENCY ?? "1", 10) || 1;
+const TTS_CONCURRENCY = parseInt(process.env.TTS_CONCURRENCY ?? "1", 10) || 1;
 
-const STT_TIMEOUT_MS = parseInt(process.env.STT_TIMEOUT_MS ?? '60000', 10) || 60000;
-const CHAT_TIMEOUT_MS = parseInt(process.env.CHAT_TIMEOUT_MS ?? '45000', 10) || 45000;
-const TTS_TIMEOUT_MS = parseInt(process.env.TTS_TIMEOUT_MS ?? '60000', 10) || 60000;
+const STT_TIMEOUT_MS =
+  parseInt(process.env.STT_TIMEOUT_MS ?? "60000", 10) || 60000;
+const CHAT_TIMEOUT_MS =
+  parseInt(process.env.CHAT_TIMEOUT_MS ?? "45000", 10) || 45000;
+const TTS_TIMEOUT_MS =
+  parseInt(process.env.TTS_TIMEOUT_MS ?? "60000", 10) || 60000;
 
 const sttSemaphore = new Semaphore(STT_CONCURRENCY);
 const ttsSemaphore = new Semaphore(TTS_CONCURRENCY);
@@ -113,12 +125,16 @@ const ttsSemaphore = new Semaphore(TTS_CONCURRENCY);
 const server = createServer();
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws: WebSocket) => {
+wss.on("connection", (ws: WebSocket) => {
   const sessionId = crypto.randomUUID();
-  sessions.set(sessionId, { history: [], exchangeCount: 0, queue: Promise.resolve() });
+  sessions.set(sessionId, {
+    history: [],
+    exchangeCount: 0,
+    queue: Promise.resolve(),
+  });
   console.log(`[WS] Client connected — session: ${sessionId}`);
 
-  ws.on('message', (rawData) => {
+  ws.on("message", (rawData) => {
     // Ensure we process this client's messages sequentially (prevents out-of-order replies + history races).
     const session = sessions.get(sessionId);
     if (!session) return;
@@ -129,30 +145,46 @@ wss.on('connection', (ws: WebSocket) => {
         try {
           msg = JSON.parse(rawData.toString()) as IncomingMessage;
         } catch {
-          console.error('[WS] Invalid JSON message received');
+          console.error("[WS] Invalid JSON message received");
           return;
         }
 
         let userText: string;
-        if (msg.type === 'text') {
-          userText = (msg.text ?? '').trim();
+        if (msg.type === "text") {
+          userText = (msg.text ?? "").trim();
           if (!userText) return;
           console.log(`[WS] User text: "${userText.slice(0, 60)}..."`);
-        } else if (msg.type === 'audio' && msg.audio?.length) {
+        } else if (msg.type === "audio" && msg.audio?.length) {
           try {
             const audioBuffer = Buffer.from(msg.audio);
-            console.log(`[WS] Transcribing audio (${audioBuffer.byteLength} bytes)...`);
+            console.log(
+              `[WS] Transcribing audio (${audioBuffer.byteLength} bytes)...`,
+            );
             userText = await sttSemaphore.withPermit(() =>
-              withTimeout(transcribe(audioBuffer), STT_TIMEOUT_MS, 'STT(transcribe)')
+              withTimeout(
+                transcribe(audioBuffer),
+                STT_TIMEOUT_MS,
+                "STT(transcribe)",
+              ),
             );
             console.log(`[WS] Transcript: "${userText}"`);
             if (!userText.trim()) {
-              ws.send(JSON.stringify({ type: 'error', message: 'Could not transcribe audio — please try again.' }));
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "Could not transcribe audio — please try again.",
+                }),
+              );
               return;
             }
           } catch (err) {
-            console.error('[WS] Transcribe error:', err);
-            ws.send(JSON.stringify({ type: 'error', message: 'Could not transcribe audio — please try again.' }));
+            console.error("[WS] Transcribe error:", err);
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Could not transcribe audio — please try again.",
+              }),
+            );
             return;
           }
         } else {
@@ -161,19 +193,25 @@ wss.on('connection', (ws: WebSocket) => {
 
         try {
           // ── GPT-4o: text → reply ─────────────────────────────────────────
-          const reply = await withTimeout(chat(session.history, userText), CHAT_TIMEOUT_MS, 'LLM(chat)');
-          console.log(`[WS] GPT reply (${reply.length} chars): "${reply.slice(0, 80)}..."`);
+          const reply = await withTimeout(
+            chat(session.history, userText),
+            CHAT_TIMEOUT_MS,
+            "LLM(chat)",
+          );
+          console.log(
+            `[WS] GPT reply (${reply.length} chars): "${reply.slice(0, 80)}..."`,
+          );
 
           session.history.push(
-            { role: 'user', content: userText },
-            { role: 'assistant', content: reply }
+            { role: "user", content: userText },
+            { role: "assistant", content: reply },
           );
           session.exchangeCount++;
 
           // ── 3. Check if GPT returned a score JSON ───────────────────────────
           const score = tryParseScore(reply);
           if (score) {
-            ws.send(JSON.stringify({ type: 'score', ...score }));
+            ws.send(JSON.stringify({ type: "score", ...score }));
             sessions.delete(sessionId);
             return;
           }
@@ -181,21 +219,32 @@ wss.on('connection', (ws: WebSocket) => {
           // ── 4. TTS: reply text → audio (strip markdown so we speak "hear" not "asterisk asterisk hear") ──
           const textForTTS = stripMarkdownForTTS(reply);
           const { audio, phonemes } = await ttsSemaphore.withPermit(() =>
-            withTimeout(synthesise(textForTTS), TTS_TIMEOUT_MS, 'TTS(synthesise)')
+            withTimeout(
+              synthesise(textForTTS),
+              TTS_TIMEOUT_MS,
+              "TTS(synthesise)",
+            ),
           );
 
           // ── 5. Send response to browser (strip markdown so chat doesn't show "**text**") ──
-          ws.send(JSON.stringify({
-            type: 'response',
-            text: textForTTS,
-            userText,
-            audio: Array.from(audio),   // Float32Array → JSON array
-            phonemes,
-            exchangeCount: session.exchangeCount,
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "response",
+              text: textForTTS,
+              userText,
+              audio: Array.from(audio), // Float32Array → JSON array
+              phonemes,
+              exchangeCount: session.exchangeCount,
+            }),
+          );
         } catch (err) {
-          console.error('[WS] Pipeline error:', err);
-          ws.send(JSON.stringify({ type: 'error', message: 'Server error processing your audio.' }));
+          console.error("[WS] Pipeline error:", err);
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              message: "Server error processing your audio.",
+            }),
+          );
         }
       })
       .catch((err) => {
@@ -204,64 +253,86 @@ wss.on('connection', (ws: WebSocket) => {
       });
   });
 
-  ws.on('close', () => {
+  ws.on("close", () => {
     console.log(`[WS] Client disconnected — session: ${sessionId}`);
     sessions.delete(sessionId);
   });
 
-  ws.on('error', (err) => {
+  ws.on("error", (err) => {
     console.error(`[WS] Socket error (${sessionId}):`, err);
   });
 
   // Send session ID to client on connect
-  ws.send(JSON.stringify({ type: 'connected', sessionId }));
+  ws.send(JSON.stringify({ type: "connected", sessionId }));
 });
 
 // HTTP: POST /api/tts for training page (and any client that needs TTS-only)
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
 };
 
-server.on('request', (req, res) => {
-  if (req.method === 'OPTIONS') {
+server.on("request", (req, res) => {
+  if (req.method === "OPTIONS") {
     res.writeHead(204, CORS_HEADERS);
     res.end();
     return;
   }
 
-  if (req.method !== 'POST' || req.url !== '/api/tts') {
+  if (req.method !== "POST" || req.url !== "/api/tts") {
     res.writeHead(404);
     res.end();
     return;
   }
 
-  let body = '';
-  req.on('data', (chunk) => { body += chunk; });
-  req.on('end', async () => {
+  let body = "";
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+  req.on("end", async () => {
     try {
-      const { text, voice } = JSON.parse(body || '{}') as { text?: string; voice?: string };
+      const { text, voice } = JSON.parse(body || "{}") as {
+        text?: string;
+        voice?: string;
+      };
       if (!text?.trim()) {
-        res.writeHead(400, { 'Content-Type': 'application/json', ...CORS_HEADERS });
-        res.end(JSON.stringify({ error: 'text is required' }));
+        res.writeHead(400, {
+          "Content-Type": "application/json",
+          ...CORS_HEADERS,
+        });
+        res.end(JSON.stringify({ error: "text is required" }));
         return;
       }
       const textForTTS = stripMarkdownForTTS(text);
       const { audio, phonemes } = await ttsSemaphore.withPermit(() =>
-        withTimeout(synthesise(textForTTS, voice), TTS_TIMEOUT_MS, 'TTS(synthesise)')
+        withTimeout(
+          synthesise(textForTTS, voice),
+          TTS_TIMEOUT_MS,
+          "TTS(synthesise)",
+        ),
       );
-      res.writeHead(200, { 'Content-Type': 'application/json', ...CORS_HEADERS });
-      res.end(JSON.stringify({ audio: Array.from(audio), phonemes: phonemes ?? [] }));
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        ...CORS_HEADERS,
+      });
+      res.end(
+        JSON.stringify({ audio: Array.from(audio), phonemes: phonemes ?? [] }),
+      );
     } catch (err) {
-      console.error('[API /api/tts] Error:', err);
-      res.writeHead(500, { 'Content-Type': 'application/json', ...CORS_HEADERS });
-      res.end(JSON.stringify({ error: 'TTS synthesis failed' }));
+      console.error("[API /api/tts] Error:", err);
+      res.writeHead(500, {
+        "Content-Type": "application/json",
+        ...CORS_HEADERS,
+      });
+      res.end(JSON.stringify({ error: "TTS synthesis failed" }));
     }
   });
 });
 
-const PORT = parseInt(process.env.WS_PORT ?? '8080', 10);
+const PORT = parseInt(process.env.WS_PORT ?? process.env.PORT ?? "8080", 10);
 server.listen(PORT, () => {
-  console.log(`🚀 Avatar Training server: ws://localhost:${PORT} + http://localhost:${PORT}/api/tts`);
+  console.log(
+    `🚀 Avatar Training server: ws://localhost:${PORT} + http://localhost:${PORT}/api/tts`,
+  );
 });
