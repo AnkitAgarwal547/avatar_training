@@ -4,3 +4,4 @@ node_modules/
 *.wav
 *.mp3
 dist/
+.env*
