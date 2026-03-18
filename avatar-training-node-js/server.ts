@@ -4,9 +4,14 @@ import { transcribe } from './lib/whisper.js';
 import { initTTS, synthesise } from './lib/kokoro.js';
 import { chat, tryParseScore, Message } from './lib/openai.js';
 
-// Load env vars from .env.local when running outside Next.js
+// Load env vars: .env.local (dev) or .env (production)
 import { config } from 'dotenv';
-config({ path: '.env.local' });
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+const envPath = existsSync(resolve(process.cwd(), '.env.local'))
+  ? '.env.local'
+  : '.env';
+config({ path: envPath });
 
 interface Session {
   history: Message[];
