@@ -1,0 +1,6 @@
+node_modules/
+.next/
+.env.local
+*.wav
+*.mp3
+dist/
