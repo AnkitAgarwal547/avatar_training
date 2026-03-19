@@ -100,11 +100,17 @@ function withTimeout<T>(
   });
 }
 
-// Pre-warm Kokoro TTS model before accepting connections
-console.log(
-  "🔄 Loading Kokoro TTS model (this may take a moment on first run)...",
-);
-await initTTS();
+// Pre-warm Kokoro TTS model before accepting connections.
+// On small instances (e.g. Railway 1GB), prewarming can cause OOM — keep it opt-in.
+const PREWARM_TTS = (process.env.PREWARM_TTS ?? "").toLowerCase() === "true";
+if (PREWARM_TTS) {
+  console.log(
+    "🔄 Loading Kokoro TTS model (this may take a moment on first run)...",
+  );
+  await initTTS();
+} else {
+  console.log('ℹ️ Skipping Kokoro prewarm (set PREWARM_TTS=true to enable)');
+}
 
 const sessions = new Map<string, Session>();
 
@@ -118,6 +124,8 @@ const CHAT_TIMEOUT_MS =
   parseInt(process.env.CHAT_TIMEOUT_MS ?? "45000", 10) || 45000;
 const TTS_TIMEOUT_MS =
   parseInt(process.env.TTS_TIMEOUT_MS ?? "60000", 10) || 60000;
+const HISTORY_MAX_MESSAGES =
+  parseInt(process.env.HISTORY_MAX_MESSAGES ?? "12", 10) || 12;
 
 const sttSemaphore = new Semaphore(STT_CONCURRENCY);
 const ttsSemaphore = new Semaphore(TTS_CONCURRENCY);
@@ -206,6 +214,9 @@ wss.on("connection", (ws: WebSocket) => {
             { role: "user", content: userText },
             { role: "assistant", content: reply },
           );
+          if (session.history.length > HISTORY_MAX_MESSAGES) {
+            session.history = session.history.slice(-HISTORY_MAX_MESSAGES);
+          }
           session.exchangeCount++;
 
           // ── 3. Check if GPT returned a score JSON ───────────────────────────

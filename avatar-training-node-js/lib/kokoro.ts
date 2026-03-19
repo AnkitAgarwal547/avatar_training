@@ -9,6 +9,11 @@ export interface SynthesisResult {
 let ttsInstance: KokoroTTS | null = null;
 let initPromise: Promise<KokoroTTS> | null = null;
 
+function getKokoroDtype(): string {
+  // Prefer lower memory footprint on small instances (e.g. Railway 1GB).
+  return process.env.KOKORO_DTYPE?.trim() || (process.env.NODE_ENV === 'production' ? 'q8' : 'fp32');
+}
+
 /**
  * Lazily load the Kokoro ONNX model (downloads ~320 MB on first use).
  * Subsequent calls reuse the cached singleton.
@@ -18,7 +23,7 @@ async function getTTS(): Promise<KokoroTTS> {
 
   if (!initPromise) {
     initPromise = KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-ONNX', {
-      dtype: 'fp32', // CPU-friendly; use 'q8' for faster inference on capable hardware
+      dtype: getKokoroDtype(), // 'q8' is lower-memory; 'fp32' is highest quality
     }).then((instance) => {
       ttsInstance = instance;
       return instance;

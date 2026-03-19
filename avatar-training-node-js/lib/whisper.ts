@@ -8,14 +8,17 @@ import os from 'os';
  * The model is auto-downloaded on first use (~150 MB).
  */
 export async function transcribe(audioBuffer: Buffer): Promise<string> {
+  const modelName =
+    process.env.WHISPER_MODEL?.trim() ||
+    (process.env.NODE_ENV === 'production' ? 'tiny.en' : 'base.en');
   const tmpFile = path.join(os.tmpdir(), `audio_${Date.now()}.wav`);
 
   try {
     fs.writeFileSync(tmpFile, audioBuffer);
 
     const result = await nodewhisper(tmpFile, {
-      modelName: 'base.en',
-      autoDownloadModelName: 'base.en',
+      modelName,
+      autoDownloadModelName: modelName,
       whisperOptions: {
         outputInText: true,
       },
