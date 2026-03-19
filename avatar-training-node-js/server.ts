@@ -109,7 +109,7 @@ if (PREWARM_TTS) {
   );
   await initTTS();
 } else {
-  console.log('ℹ️ Skipping Kokoro prewarm (set PREWARM_TTS=true to enable)');
+  console.log("ℹ️ Skipping Kokoro prewarm (set PREWARM_TTS=true to enable)");
 }
 
 const sessions = new Map<string, Session>();
@@ -280,7 +280,8 @@ wss.on("connection", (ws: WebSocket) => {
 // HTTP: POST /api/tts for training page (and any client that needs TTS-only)
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods":
+    "POST, OPTIONS, GET, PUT, DELETE, UPDATE, PATCH",
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
