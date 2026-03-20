@@ -22,10 +22,6 @@ const TalkingAvatar = dynamic(() => import("../components/TalkingAvatar"), {
   ssr: false,
 });
 
-// Node TTS endpoint (Kokoro) from the avatar-training-node-js app
-const TTS_URL =
-  process.env.NEXT_PUBLIC_TTS_URL || "http://localhost:8080/api/tts";
-
 function TrainingContent() {
   const searchParams = useSearchParams();
   const moduleId = searchParams.get("module") || trainingModules[0].id;
@@ -50,6 +46,7 @@ function TrainingContent() {
 
   // Bridge into TalkingAvatar (same pattern as roleplay page)
   const speakRef = useRef(null);
+  const speakTextRef = useRef(null);
   const resumeAudioRef = useRef(null);
   const stopRef = useRef(null);
 
@@ -90,89 +87,53 @@ function TrainingContent() {
   }, [avatarReady, lesson?.id, lessonStarted]);
 
   /**
-   * Speak text using the shared Kokoro TTS + TalkingAvatar pipeline.
-   * Falls back to browser SpeechSynthesis if the Node TTS endpoint is unavailable.
+   * Speak text using TalkingHead's built-in lip-sync + browser SpeechSynthesis.
+   * This is instant — no server round-trip needed.
    */
   const speakText = useCallback(
     async (text) => {
       if (!text) return;
 
       speechRef.current?.stop();
-
       resumeAudioRef.current?.();
 
       setIsSpeaking(true);
       setAvatarState("talking");
-      // Don't put long chatbot responses in the left bubble — keep it short
       setAvatarMessage(text.length > 100 ? "Speaking…" : text);
 
-      // 1) Try Node TTS -> TalkingAvatar (same as roleplay)
-      if (speakRef.current) {
+      // Use TalkingHead's speakText (browser TTS + automatic lip-sync)
+      if (speakTextRef.current) {
         try {
-          const res = await fetch(TTS_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, voice: "af_heart" }),
-          });
-
-          if (!res.ok) {
-            throw new Error(`TTS request failed with status ${res.status}`);
-          }
-
-          const data = await res.json();
-          let audio = Array.isArray(data.audio)
-            ? new Float32Array(data.audio)
-            : new Float32Array(0);
-
-          // Apply volume to TTS playback (0..1)
-          if (audio.length > 0 && volume !== 1) {
-            const scaled = new Float32Array(audio.length);
-            for (let i = 0; i < audio.length; i++)
-              scaled[i] = audio[i] * volume;
-            audio = scaled;
-          }
-
-          if (audio.length > 0) {
-            await speakRef.current(audio, data.phonemes ?? [], {
-              sampleRate: 24000,
-            });
-          }
-
+          await speakTextRef.current(text);
           setIsSpeaking(false);
           setAvatarState("idle");
           return;
         } catch (err) {
-          console.error(
-            "[Training] Node TTS failed, falling back to browser TTS:",
-            err,
-          );
+          console.error("[Training] TalkingHead speakText failed:", err);
         }
       }
 
-      // 2) Fallback: browser SpeechSynthesis (old behaviour)
-      if (!speechRef.current) {
-        setIsSpeaking(false);
-        setAvatarState("idle");
-        return;
+      // Fallback: browser SpeechSynthesis without avatar lip-sync
+      if (speechRef.current) {
+        try {
+          await speechRef.current.speak(text, {
+            volume,
+            onStart: () => {
+              setIsSpeaking(true);
+              setAvatarState("talking");
+            },
+            onEnd: () => {
+              setIsSpeaking(false);
+              setAvatarState("idle");
+            },
+          });
+        } catch (err) {
+          console.error("Speech error:", err);
+        }
       }
 
-      try {
-        await speechRef.current.speak(text, {
-          volume,
-          onStart: () => {
-            setIsSpeaking(true);
-            setAvatarState("talking");
-          },
-          onEnd: () => {
-            setIsSpeaking(false);
-            setAvatarState("idle");
-          },
-        });
-      } catch (err) {
-        console.error("Speech error:", err);
-        setIsSpeaking(false);
-        setAvatarState("idle");
-      }
+      setIsSpeaking(false);
+      setAvatarState("idle");
     },
     [volume],
   );
@@ -372,6 +333,7 @@ function TrainingContent() {
             <TalkingAvatar
               onReady={() => setAvatarReady(true)}
               onSpeakRef={speakRef}
+              onSpeakTextRef={speakTextRef}
               onResumeAudioRef={resumeAudioRef}
               onStopRef={stopRef}
               containerStyle={{ width: "100%", minHeight: 320 }}

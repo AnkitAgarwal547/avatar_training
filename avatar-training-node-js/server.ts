@@ -227,24 +227,15 @@ wss.on("connection", (ws: WebSocket) => {
             return;
           }
 
-          // ── 4. TTS: reply text → audio (strip markdown so we speak "hear" not "asterisk asterisk hear") ──
-          const textForTTS = stripMarkdownForTTS(reply);
-          const { audio, phonemes } = await ttsSemaphore.withPermit(() =>
-            withTimeout(
-              synthesise(textForTTS),
-              TTS_TIMEOUT_MS,
-              "TTS(synthesise)",
-            ),
-          );
-
-          // ── 5. Send response to browser (strip markdown so chat doesn't show "**text**") ──
+          // ── 4. Send text response immediately (client handles TTS via browser SpeechSynthesis) ──
+          const textForDisplay = stripMarkdownForTTS(reply);
           ws.send(
             JSON.stringify({
               type: "response",
-              text: textForTTS,
+              text: textForDisplay,
               userText,
-              audio: Array.from(audio), // Float32Array → JSON array
-              phonemes,
+              audio: [],
+              phonemes: [],
               exchangeCount: session.exchangeCount,
             }),
           );

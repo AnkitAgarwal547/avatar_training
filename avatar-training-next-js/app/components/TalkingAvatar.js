@@ -2,13 +2,44 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 
-// TalkingHead is not on npm — load it from jsDelivr CDN
+// TalkingHead v1.7+ has built-in MeshOpt decoder support
 const TALKING_HEAD_CDN =
-  "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.3/modules/talkinghead.mjs";
+  "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs";
 
-// Sample avatar from the TalkingHead repo — works out of the box, no local file needed
-const DEFAULT_AVATAR_URL =
-  "https://models.readyplayer.me/64bfa15f0e72c63d7c3934a6.glb?morphTargets=ARKit,Oculus+Visemes,mouthOpen,mouthSmile,eyesClosed,eyesLookUp,eyesLookDown&textureSizeLimit=1024&textureFormat=png";
+// Local avatar (fast) — place avatar.glb in public/avatars/
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "/ai-avatar";
+const LOCAL_AVATAR_URL = `${BASE_PATH}/avatars/avatar.glb`;
+// Fallback CDN (when local missing) — TalkingHead's own sample avatar
+const CDN_AVATAR_URL =
+  "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/avatars/brunette.glb";
+
+// Pre-cache a female SpeechSynthesis voice (voices load async in Chrome)
+let _cachedFemaleVoice = null;
+let _voicesReady = false;
+function getFemaleVoice() {
+  if (_cachedFemaleVoice) return _cachedFemaleVoice;
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  _cachedFemaleVoice =
+    voices.find((v) => v.name.includes("Zira") && v.lang.startsWith("en")) ||
+    voices.find((v) => v.name.includes("Samantha") && v.lang.startsWith("en")) ||
+    voices.find((v) => /Microsoft.*Female/i.test(v.name) && v.lang.startsWith("en")) ||
+    voices.find((v) => v.name.includes("Google UK English Female")) ||
+    voices.find((v) => /female/i.test(v.name) && v.lang.startsWith("en")) ||
+    voices.find((v) => v.lang.startsWith("en") && /woman|girl|samantha|zira|susan|hazel|linda|jenny|aria|libby|sonia/i.test(v.name)) ||
+    voices.find((v) => v.lang.startsWith("en-") && v.localService) ||
+    null;
+  return _cachedFemaleVoice;
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => {
+    _cachedFemaleVoice = null;
+    _voicesReady = true;
+    getFemaleVoice();
+  };
+}
 
 function loadTalkingHeadScript() {
   return new Promise((resolve, reject) => {
@@ -91,12 +122,50 @@ function audioEnvelopeToVisemes(samples, sampleRate, windowMs = 50) {
   return { visemes, vtimes, vdurations };
 }
 
+/**
+ * Generate word-timed visemes from text for lip-sync animation.
+ * Returns visemes, vtimes, vdurations and estimated total duration in ms.
+ */
+function textToVisemes(text) {
+  const words = text.split(/\s+/).filter((w) => w.length > 0);
+  const MS_PER_CHAR = 55;
+  const GAP_MS = 40;
+  const OPEN = ["aa", "O", "EE", "I", "aa", "U"];
+  const visemes = [];
+  const vtimes = [];
+  const vdurations = [];
+  let t = 0;
+  for (const word of words) {
+    const syllables = Math.max(1, Math.ceil(word.length / 3));
+    const wordMs = Math.max(150, word.length * MS_PER_CHAR);
+    const sylMs = wordMs / syllables;
+    for (let s = 0; s < syllables; s++) {
+      const openMs = sylMs * 0.65;
+      const closeMs = sylMs * 0.35;
+      visemes.push(OPEN[(s + word.charCodeAt(0)) % OPEN.length]);
+      vtimes.push(t);
+      vdurations.push(openMs);
+      t += openMs;
+      visemes.push(VISEME_SIL);
+      vtimes.push(t);
+      vdurations.push(closeMs);
+      t += closeMs;
+    }
+    visemes.push(VISEME_SIL);
+    vtimes.push(t);
+    vdurations.push(GAP_MS);
+    t += GAP_MS;
+  }
+  return { visemes, vtimes, vdurations, totalMs: Math.max(500, t) };
+}
+
 /** Supported expression/mood values: "neutral" | "happy" | "angry" (TalkingHead setMood). */
 
 export default function TalkingAvatar({
   containerStyle,
   onReady,
   onSpeakRef,
+  onSpeakTextRef,
   onResumeAudioRef,
   onStopRef,
   onExpressionRef,
@@ -118,8 +187,10 @@ export default function TalkingAvatar({
     }
   }, []);
 
-  // Use the sample avatar if no local one is specified
-  const resolvedAvatarUrl = avatarUrl || DEFAULT_AVATAR_URL;
+  // Try local first (fast), then CDN fallback; or use custom avatarUrl if provided
+  const avatarUrls = avatarUrl
+    ? [avatarUrl]
+    : [LOCAL_AVATAR_URL, CDN_AVATAR_URL];
 
   const speak = useCallback(async (audio, phonemes, options = {}) => {
     if (!headRef.current) return;
@@ -172,15 +243,72 @@ export default function TalkingAvatar({
     }
   }, []);
 
+  const speakTextDirect = useCallback(async (text) => {
+    const head = headRef.current;
+    if (!head || !text) return;
+    resumeHeadAudioContext(head);
+    try {
+      const { visemes, vtimes, vdurations, totalMs } = textToVisemes(text);
+      const sampleRate = 24000;
+      const totalSamples = Math.round((sampleRate * totalMs) / 1000);
+
+      // Near-silent PCM buffer — drives TalkingHead's animation timer without audible sound
+      const silence = new Float32Array(totalSamples);
+      for (let i = 0; i < totalSamples; i++) {
+        silence[i] = 1e-5 * (Math.random() - 0.5);
+      }
+      const audioForHead = float32ToInt16Pcm(silence);
+
+      // Drive lip-sync via speakAudio (mouth moves, audio inaudible)
+      head.speakAudio(
+        {
+          audio: audioForHead,
+          sampleRate,
+          words: [" "],
+          wtimes: [0],
+          wdurations: [totalMs],
+          visemes,
+          vtimes,
+          vdurations,
+        },
+        { lipsyncLang: "en" },
+      );
+
+      // Actual voice via browser SpeechSynthesis (instant, no network)
+      await new Promise((resolve) => {
+        const synth = typeof window !== "undefined" && window.speechSynthesis;
+        if (!synth) {
+          resolve();
+          return;
+        }
+        synth.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = "en-US";
+        utt.rate = 1.0;
+        const voice = getFemaleVoice();
+        if (voice) utt.voice = voice;
+        utt.onend = resolve;
+        utt.onerror = resolve;
+        synth.speak(utt);
+      });
+    } catch (err) {
+      console.error("[TalkingAvatar] speakText error:", err);
+    }
+  }, []);
+
   const resumeAudio = useCallback(() => {
     resumeHeadAudioContext(headRef.current);
   }, []);
 
   const stop = useCallback(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
     const head = headRef.current;
     if (!head) return;
     try {
-      if (typeof head.streamStop === "function") head.streamStop();
+      if (typeof head.stopSpeaking === "function") head.stopSpeaking();
+      else if (typeof head.streamStop === "function") head.streamStop();
       else if (typeof head.stop === "function") head.stop();
       else if (typeof head.stopAudio === "function") head.stopAudio();
     } catch {
@@ -191,6 +319,10 @@ export default function TalkingAvatar({
   useEffect(() => {
     if (onSpeakRef) onSpeakRef.current = speak;
   }, [speak, onSpeakRef]);
+
+  useEffect(() => {
+    if (onSpeakTextRef) onSpeakTextRef.current = speakTextDirect;
+  }, [speakTextDirect, onSpeakTextRef]);
 
   useEffect(() => {
     if (onResumeAudioRef) onResumeAudioRef.current = resumeAudio;
@@ -226,7 +358,27 @@ export default function TalkingAvatar({
       try {
         setLoadState("loading");
 
-        // Step 1 — load TalkingHead from CDN
+        // Step 0 — Patch GLTFLoader so every instance auto-sets MeshOpt decoder
+        // (TalkingHead creates its own loader; setMeshoptDecoder is per-instance)
+        if (!window.__MeshoptDecoderConfigured) {
+          const [gltfMod, meshoptMod] = await Promise.all([
+            import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js"),
+            import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/libs/meshopt_decoder.module.js"),
+          ]);
+          const GLTFLoader = gltfMod.GLTFLoader ?? gltfMod.default;
+          const MeshoptDecoder = meshoptMod.MeshoptDecoder ?? meshoptMod.default;
+          if (GLTFLoader && MeshoptDecoder && GLTFLoader.prototype.load) {
+            const origLoad = GLTFLoader.prototype.load;
+            GLTFLoader.prototype.load = function (url, onLoad, onProgress, onError) {
+              if (!this.meshoptDecoder) this.setMeshoptDecoder(MeshoptDecoder);
+              return origLoad.call(this, url, onLoad, onProgress, onError);
+            };
+            window.__MeshoptDecoderConfigured = true;
+          }
+        }
+        if (cancelled) return;
+
+        // Step 1 — load TalkingHead
         const mod = await loadTalkingHeadScript();
         if (cancelled) return;
 
@@ -234,26 +386,33 @@ export default function TalkingAvatar({
         if (!TalkingHead)
           throw new Error("TalkingHead class not found in CDN module");
 
-        // Step 2 — create the 3D scene
-        // ttsEndpoint is required by TalkingHead even if we only use speakAudio().
-        // We point it to our own Kokoro TTS route so it never calls Google.
+        // Step 2 — create the 3D scene (no ttsEndpoint — we use speakAudio + browser SpeechSynthesis)
         const head = new TalkingHead(containerRef.current, {
           cameraView: "upper",
           avatarMood: initialExpression,
-          ttsEndpoint: "/api/tts-proxy", // handled below — just needs to be a valid URL
-          ttsApikey: "",
-          ttsTrimStart: 0,
-          ttsTrimEnd: 0,
-          pcmSampleRate: 24000, // Kokoro TTS is 24 kHz
+          lipsyncLang: "en",
+          pcmSampleRate: 24000,
         });
 
-        // Step 3 — load the avatar model
-        await head.showAvatar({
-          url: resolvedAvatarUrl,
-          body: "F",
-          avatarMood: initialExpression,
-        });
-
+        // Step 3 — load avatar: try local first (fast), then CDN fallback
+        let lastErr = null;
+        for (const url of avatarUrls) {
+          if (cancelled) return;
+          try {
+            await head.showAvatar({
+              url,
+              body: "F",
+              lipsyncLang: "en",
+              avatarMood: initialExpression,
+            });
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+            console.warn("[TalkingAvatar] Failed to load from", url, e?.message);
+          }
+        }
+        if (lastErr) throw lastErr;
         if (cancelled) return;
 
         headRef.current = head;
@@ -281,7 +440,7 @@ export default function TalkingAvatar({
       }
       headRef.current = null;
     };
-  }, [resolvedAvatarUrl, initialExpression]); // removed onReady from deps, relying on the ref
+  }, [avatarUrl, initialExpression]);
 
   const isOverlayVisible = loadState !== "ready";
 

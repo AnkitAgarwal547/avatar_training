@@ -30,7 +30,8 @@ class AIService {
    */
   async askQuestion(question, context = '') {
     try {
-      const response = await fetch('/api/chat', {
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/ai-avatar';
+      const response = await fetch(`${basePath}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -14,6 +14,8 @@ server {
   include             /etc/letsencrypt/options-ssl-nginx.conf;
   ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
 
+  client_max_body_size 10M;
+
   # Main app mounted at /ocr-app (path is preserved when proxying)
   location /ocr-app {
     proxy_pass http://127.0.0.1:5001;

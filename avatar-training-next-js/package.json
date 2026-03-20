@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "start:prod": "next start -p 5003"
+    "start:prod": "next start -p 5003",
+    "download-avatar": "node scripts/download-avatar.js"
   },
   "dependencies": {
     "next": "16.1.6",

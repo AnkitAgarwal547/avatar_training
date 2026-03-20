@@ -7,12 +7,12 @@ export const metadata = {
     "Experience the future of training with an AI-powered talking avatar that delivers interactive lessons, quizzes, and personalized learning.",
 };
 
-// Import map so the browser can resolve bare specifiers used by TalkingHead CDN module
+// Import map — use Three.js 0.180.0 to match TalkingHead (meshopt decoder compatibility)
 const importMap = {
   imports: {
-    three: "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/": "https://cdn.jsdelivr.net/npm/three@0.160.0/",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+    three: "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+    "three/": "https://cdn.jsdelivr.net/npm/three@0.180.0/",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
   },
 };
 

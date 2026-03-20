@@ -24,6 +24,7 @@ function RoleplayContent() {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const speakRef = useRef(null);
+  const speakTextRef = useRef(null);
   const resumeAudioRef = useRef(null);
   const stopRef = useRef(null);
   const currentAudioSourceRef = useRef(null);
@@ -103,6 +104,20 @@ function RoleplayContent() {
             ];
           });
 
+          setStatus("speaking");
+
+          // Use TalkingHead's built-in speakText (browser TTS + lip-sync) — instant, no Kokoro wait
+          if (speakTextRef.current) {
+            try {
+              await speakTextRef.current(msg.text);
+              setStatus("idle");
+              return;
+            } catch (err) {
+              console.error("[Roleplay] speakText failed:", err);
+            }
+          }
+
+          // Fallback: play server audio if available
           if (
             speakRef.current &&
             Array.isArray(msg.audio) &&
@@ -114,12 +129,13 @@ function RoleplayContent() {
               } catch {}
               currentAudioSourceRef.current = null;
             }
-            setStatus("speaking");
             const samples = new Float32Array(msg.audio);
             await speakRef.current(samples, msg.phonemes ?? [], {
               sampleRate: 24000,
             });
             playAudioSamples(samples, () => setStatus("idle"));
+          } else {
+            setStatus("idle");
           }
           return;
         }
@@ -261,6 +277,7 @@ function RoleplayContent() {
             <TalkingAvatar
               onReady={() => setIsAvatarReady(true)}
               onSpeakRef={speakRef}
+              onSpeakTextRef={speakTextRef}
               onResumeAudioRef={resumeAudioRef}
               onStopRef={stopRef}
               containerStyle={{ height: "100%" }}
